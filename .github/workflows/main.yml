@@ -1,0 +1,47 @@
+name: Run Python Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      crew_duration:
+        description: '크루 기간 (예: 2024-08-01~2024-08-31)'
+        required: true
+        type: string
+      vacation_days:
+        description: '휴가 일정 (쉼표로 구분, 예: 2024-08-15,2024-08-16)'
+        required: false
+        default: ''
+        type: string
+      days_in_month:
+        description: '한 달의 일 수 (예: 31)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Create config.json
+      run: echo "${{ secrets.CONFIG_JSON }}" > config.json
+      shell: bash
+
+    - name: Run script
+      run: python main.py
+      env:
+        CREW_DURATION: ${{ github.event.inputs.crew_duration }}
+        VACATION_DAYS: ${{ github.event.inputs.vacation_days }}
+        DAYS_IN_MONTH: ${{ github.event.inputs.days_in_month }}
