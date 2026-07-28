@@ -126,7 +126,7 @@ def main():
     Crew 스케줄링 프로세스를 실행하는 메인 함수.
     """
     # 1. 설정 불러오기
-    with open('Crew/config.json', 'r') as f:
+    with open('config.json', 'r') as f:
         config = json.load(f)
 
     print("--- 설정 로드 완료 ---")
