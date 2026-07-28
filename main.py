@@ -95,7 +95,7 @@ def calculate_total_penalty(config, solution):
             if max(0, end_d - start_d + 1) > 0:
                 vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
                 effective_crew_days_in_period = max(0, end_d - start_d + 1) - vacation_days_in_crew_period
-                if effective_crew_days_in_crew_period > 0:
+                if effective_crew_days_in_period > 0:
                     my_expected_hours = -int(-(effective_crew_days_in_crew_period * 40 / 7.0))
             
             current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
