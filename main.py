@@ -51,7 +51,7 @@ def calculate_total_penalty(config, solution):
                 vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
                 effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
                 if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
+                    my_expected_hours = -int(-(effective_crew_days_in_crew_period * 40 / 7.0))
             
             current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
                                      for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
@@ -95,8 +95,8 @@ def calculate_total_penalty(config, solution):
             if max(0, end_d - start_d + 1) > 0:
                 vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
                 effective_crew_days_in_period = max(0, end_d - start_d + 1) - vacation_days_in_crew_period
-                if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
+                if effective_crew_days_in_crew_period > 0:
+                    my_expected_hours = -int(-(effective_crew_days_in_crew_period * 40 / 7.0))
             
             current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
                                      for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
@@ -141,44 +141,47 @@ def main():
     if is_running_on_actions:
         print("--- GitHub Actions 환경 감지: 입력값으로 설정 업데이트 ---")
         
-        all_crews_input_data = []
-        for i in range(10):
-            duration = os.environ.get(f'CREW_{i}_DURATION')
-            vacation = os.environ.get(f'CREW_{i}_VACATION')
-            if duration or vacation:
-                all_crews_input_data.append({'id': str(i), 'duration': duration, 'vacation': vacation})
-
         # 연/월이 입력되었다면, 해당 월의 일자로 num_days를 업데이트
         if year_str and month_str:
             year = int(year_str)
             month = int(month_str)
             config['num_days'] = calendar.monthrange(year, month)[1]
 
-        # 크루별 기간(crew_periods)과 휴가(vacations)를 새 값으로 덮어쓰기
-        if all_crews_input_data:
-            new_crew_periods = {}
-            new_vacations = []
-            for data in all_crews_input_data:
-                crew_id = int(data['id'])
-                
-                if data['duration'] and '~' in data['duration']:
-                    try:
-                        start_day, end_day = data['duration'].split('~')
-                        new_crew_periods[str(crew_id)] = [int(start_day) - 1, int(end_day) - 1]
-                    except ValueError:
-                        print(f"경고: 크루 {crew_id}의 기간({data['duration']}) 형식이 잘못되었습니다.")
+        # Actions 입력을 기반으로 새로운 crew_periods와 vacations를 생성
+        # 1. 모든 직원에 대해 기본값("활동 없음")으로 초기화
+        # config.json에 명시된 직원 수를 기준으로 합니다.
+        num_employees_from_config = config.get('num_employees', 10)
+        new_crew_periods = {i: [-1, -2] for i in range(num_employees_from_config)}
+        new_vacations = []
 
-                if data['vacation']:
-                    for day in data['vacation'].split(','):
-                        day = day.strip()
-                        if day:
-                            try:
-                                new_vacations.append([crew_id, int(day) - 1])
-                            except ValueError:
-                                print(f"경고: 크루 {crew_id}의 휴가일({day}) 형식이 잘못되었습니다.")
+        # 2. 입력된 정보로 해당 직원 정보 업데이트
+        for i in range(10): # 0~9번 크루에 대한 입력을 확인
+            duration = os.environ.get(f'CREW_{i}_DURATION')
+            vacation = os.environ.get(f'CREW_{i}_VACATION')
             
-            config['crew_periods'] = new_crew_periods
-            config['vacations'] = new_vacations
+            # 기간 정보 처리
+            if duration and '~' in duration:
+                try:
+                    start_day, end_day = duration.split('~')
+                    # 정수형 키를 사용합니다.
+                    new_crew_periods[i] = [int(start_day) - 1, int(end_day) - 1]
+                except (ValueError, IndexError):
+                    print(f"경고: 크루 {i}의 기간({duration}) 형식이 잘못되었습니다.")
+            
+            # 휴가 정보 처리
+            if vacation:
+                for day in vacation.split(','):
+                    day = day.strip()
+                    if day:
+                        try:
+                            # 정수형 키를 사용합니다.
+                            new_vacations.append([i, int(day) - 1])
+                        except ValueError:
+                            print(f"경고: 크루 {i}의 휴가일({day}) 형식이 잘못되었습니다.")
+
+        # 3. 원본 config를 새로운 정보로 덮어쓰기
+        config['crew_periods'] = new_crew_periods
+        config['vacations'] = new_vacations
 
     print("--- 설정 로드 완료 ---")
     print(f"{config['num_employees']}명의 직원을 대상으로 {config['num_days']}일간의 스케줄링을 진행합니다.")
