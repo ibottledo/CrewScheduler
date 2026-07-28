@@ -3,18 +3,55 @@ name: Run Python Script
 on:
   workflow_dispatch:
     inputs:
-      crew_duration:
-        description: '크루 기간 (예: 2024-08-01~2024-08-31)'
+      crew_id:
+        description: '크루 선택'
+        required: true
+        type: choice
+        options:
+        - '0'
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+        - '9'
+      year:
+        description: '연도 선택'
+        required: true
+        type: choice
+        options:
+        - '2023'
+        - '2024'
+        - '2025'
+        - '2026'
+      month:
+        description: '월 선택'
+        required: true
+        type: choice
+        options:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+        - '9'
+        - '10'
+        - '11'
+        - '12'
+      duration_days:
+        description: '활동 기간 (해당 월의 시작일~종료일, 예: 1~31)'
         required: true
         type: string
       vacation_days:
-        description: '휴가 일정 (쉼표로 구분, 예: 2024-08-15,2024-08-16)'
+        description: '휴가일 (쉼표로 구분, 예: 15,16,17)'
         required: false
         default: ''
-        type: string
-      days_in_month:
-        description: '한 달의 일 수 (예: 31)'
-        required: true
         type: string
 
 jobs:
@@ -42,6 +79,8 @@ jobs:
     - name: Run script
       run: python main.py
       env:
-        CREW_DURATION: ${{ github.event.inputs.crew_duration }}
+        CREW_ID: ${{ github.event.inputs.crew_id }}
+        YEAR: ${{ github.event.inputs.year }}
+        MONTH: ${{ github.event.inputs.month }}
+        DURATION_DAYS: ${{ github.event.inputs.duration_days }}
         VACATION_DAYS: ${{ github.event.inputs.vacation_days }}
-        DAYS_IN_MONTH: ${{ github.event.inputs.days_in_month }}
