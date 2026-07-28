@@ -1,0 +1,45 @@
+{
+    "_comment": "Configuration for the crew scheduling engine. Use priority levels (highest, high, medium, low) to tune the schedule.",
+    "num_days": 30,
+    "num_employees": 10,
+    "groups": {
+        "a": [0, 1, 2, 3, 4],
+        "b": [5, 6, 7, 8, 9]
+    },
+    "shifts": {
+        "D": { "hours": 10 },
+        "E": { "hours": 6 },
+        "N": { "hours": 8 }
+    },
+    "crew_periods": {
+        "0": [0, 29], "1": [10, 29], "2": [0, 16], "3": [0, -1], "4": [0, -1], 
+        "5": [0, 14], "6": [4, 29], "7": [18, 29], "8": [0, -1], "9": [15, 29]
+    },
+    "vacations": [
+        [0, 5], [0, 6], [0, 7], [0, 8], [3, 10], [3, 11], [3, 12], [3, 13], 
+        [6, 20], [6, 21], [6, 22], [6, 23]
+    ],
+    "shift_ratios": {
+        "0": {"D": 2, "E": 1, "N": 2},
+        "1": {"D": 1, "E": 2, "N": 1},
+        "2": {"D": 1, "E": 1, "N": 1},
+        "3": {"D": 0, "E": 0, "N": 1},
+        "4": {"D": 10, "E": 0, "N": 0},
+        "5": {"D": 1, "E": 1, "N": 1},
+        "6": {"D": 1, "E": 1, "N": 1},
+        "7": {"D": 1, "E": 1, "N": 1},
+        "8": {"D": 1, "E": 1, "N": 0},
+        "9": {"D": 0, "E": 0, "N": 1}
+    },
+    "penalties": {
+        "_comment_levels": "highest > high > medium > low. Higher priority means the solver will try harder to avoid this penalty.",
+        "crew_over_40h_avg_priority": "highest",
+        "consecutive_n_shifts_priority": "low",
+        "fairness_of_non_crew_work_priority": "medium",
+        "over_staffing_priority": "highest",
+        "max_over_staffing_priority": "low",
+        "non_crew_work_priority": "low",
+        "shift_ratio_priority": "low"
+    },
+    "solver_time_limit": 45.0
+}
