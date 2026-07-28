@@ -3,23 +3,8 @@ name: Run Python Script
 on:
   workflow_dispatch:
     inputs:
-      crew_id:
-        description: '크루 선택'
-        required: true
-        type: choice
-        options:
-        - '0'
-        - '1'
-        - '2'
-        - '3'
-        - '4'
-        - '5'
-        - '6'
-        - '7'
-        - '8'
-        - '9'
       year:
-        description: '연도 선택'
+        description: '연도 선택 (공통)'
         required: true
         type: choice
         options:
@@ -28,7 +13,7 @@ on:
         - '2025'
         - '2026'
       month:
-        description: '월 선택'
+        description: '월 선택 (공통)'
         required: true
         type: choice
         options:
@@ -44,14 +29,95 @@ on:
         - '10'
         - '11'
         - '12'
-      duration_days:
-        description: '활동 기간 (해당 월의 시작일~종료일, 예: 1~31)'
-        required: true
-        type: string
-      vacation_days:
-        description: '휴가일 (쉼표로 구분, 예: 15,16,17)'
+
+      crew_0_duration:
+        description: '크루 0 활동 기간 (예: 1~31)'
         required: false
-        default: ''
+        type: string
+      crew_0_vacation:
+        description: '크루 0 휴가일 (예: 15,16)'
+        required: false
+        type: string
+      
+      crew_1_duration:
+        description: '크루 1 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_1_vacation:
+        description: '크루 1 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_2_duration:
+        description: '크루 2 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_2_vacation:
+        description: '크루 2 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_3_duration:
+        description: '크루 3 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_3_vacation:
+        description: '크루 3 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_4_duration:
+        description: '크루 4 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_4_vacation:
+        description: '크루 4 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_5_duration:
+        description: '크루 5 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_5_vacation:
+        description: '크루 5 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_6_duration:
+        description: '크루 6 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_6_vacation:
+        description: '크루 6 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_7_duration:
+        description: '크루 7 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_7_vacation:
+        description: '크루 7 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_8_duration:
+        description: '크루 8 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_8_vacation:
+        description: '크루 8 휴가일 (예: 15,16)'
+        required: false
+        type: string
+
+      crew_9_duration:
+        description: '크루 9 활동 기간 (예: 1~31)'
+        required: false
+        type: string
+      crew_9_vacation:
+        description: '크루 9 휴가일 (예: 15,16)'
+        required: false
         type: string
 
 jobs:
@@ -79,8 +145,25 @@ jobs:
     - name: Run script
       run: python main.py
       env:
-        CREW_ID: ${{ github.event.inputs.crew_id }}
         YEAR: ${{ github.event.inputs.year }}
         MONTH: ${{ github.event.inputs.month }}
-        DURATION_DAYS: ${{ github.event.inputs.duration_days }}
-        VACATION_DAYS: ${{ github.event.inputs.vacation_days }}
+        CREW_0_DURATION: ${{ github.event.inputs.crew_0_duration }}
+        CREW_0_VACATION: ${{ github.event.inputs.crew_0_vacation }}
+        CREW_1_DURATION: ${{ github.event.inputs.crew_1_duration }}
+        CREW_1_VACATION: ${{ github.event.inputs.crew_1_vacation }}
+        CREW_2_DURATION: ${{ github.event.inputs.crew_2_duration }}
+        CREW_2_VACATION: ${{ github.event.inputs.crew_2_vacation }}
+        CREW_3_DURATION: ${{ github.event.inputs.crew_3_duration }}
+        CREW_3_VACATION: ${{ github.event.inputs.crew_3_vacation }}
+        CREW_4_DURATION: ${{ github.event.inputs.crew_4_duration }}
+        CREW_4_VACATION: ${{ github.event.inputs.crew_4_vacation }}
+        CREW_5_DURATION: ${{ github.event.inputs.crew_5_duration }}
+        CREW_5_VACATION: ${{ github.event.inputs.crew_5_vacation }}
+        CREW_6_DURATION: ${{ github.event.inputs.crew_6_duration }}
+        CREW_6_VACATION: ${{ github.event.inputs.crew_6_vacation }}
+        CREW_7_DURATION: ${{ github.event.inputs.crew_7_duration }}
+        CREW_7_VACATION: ${{ github.event.inputs.crew_7_vacation }}
+        CREW_8_DURATION: ${{ github.event.inputs.crew_8_duration }}
+        CREW_8_VACATION: ${{ github.event.inputs.crew_8_vacation }}
+        CREW_9_DURATION: ${{ github.event.inputs.crew_9_duration }}
+        CREW_9_VACATION: ${{ github.event.inputs.crew_9_vacation }}
