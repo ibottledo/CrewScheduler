@@ -180,26 +180,44 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         r_total = r_D + r_E + r_N
         
         if r_total > 0:
+            # 1. 1차 편차 변수 (r_total * w_shift - r_shift * total_w)
             diff_D = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_D_{e}')
-            abs_diff_D = model.NewIntVar(0, 500 * r_total, f'abs_diff_D_{e}')
-            model.Add(diff_D == r_total * w_D - r_D * total_w)
-            model.AddAbsEquality(abs_diff_D, diff_D)
-            
             diff_E = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_E_{e}')
-            abs_diff_E = model.NewIntVar(0, 500 * r_total, f'abs_diff_E_{e}')
-            model.Add(diff_E == r_total * w_E - r_E * total_w)
-            model.AddAbsEquality(abs_diff_E, diff_E)
-            
             diff_N = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_N_{e}')
-            abs_diff_N = model.NewIntVar(0, 500 * r_total, f'abs_diff_N_{e}')
+            
+            model.Add(diff_D == r_total * w_D - r_D * total_w)
+            model.Add(diff_E == r_total * w_E - r_E * total_w)
             model.Add(diff_N == r_total * w_N - r_N * total_w)
-            model.AddAbsEquality(abs_diff_N, diff_N)
+
+            # 2. 절댓값 변수 생성
+            abs_D = model.NewIntVar(0, 500 * r_total, f'abs_D_{e}')
+            abs_E = model.NewIntVar(0, 500 * r_total, f'abs_E_{e}')
+            abs_N = model.NewIntVar(0, 500 * r_total, f'abs_N_{e}')
             
-            ratio_penalty_var = model.NewIntVar(0, 3 * 500 * r_total * 1000, f'ratio_penalty_{e}')
-            model.Add(ratio_penalty_var == (abs_diff_D + abs_diff_E + abs_diff_N))
-            
-            ratio_penalty = model.NewIntVar(0, 3 * 500 * r_total * 1000, f'ratio_penalty_scaled_{e}')
-            model.AddMultiplicationEquality(ratio_penalty, ratio_penalty_var, PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']])
+            model.AddAbsEquality(abs_D, diff_D)
+            model.AddAbsEquality(abs_E, diff_E)
+            model.AddAbsEquality(abs_N, diff_N)
+
+            # 3. [핵심] 오차의 제곱 변수 추가 (쏠림 현상을 수학적으로 강력 억제)
+            # 쏠린 인원(오차 10)의 제곱은 100이 되므로, 오차가 1~2인 10명보다 페널티가 훨씬 커짐
+            sq_D = model.NewIntVar(0, (500 * r_total) ** 2, f'sq_D_{e}')
+            sq_E = model.NewIntVar(0, (500 * r_total) ** 2, f'sq_E_{e}')
+            sq_N = model.NewIntVar(0, (500 * r_total) ** 2, f'sq_N_{e}')
+
+            model.AddMultiplicationEquality(sq_D, abs_D, abs_D)
+            model.AddMultiplicationEquality(sq_E, abs_E, abs_E)
+            model.AddMultiplicationEquality(sq_N, abs_N, abs_N)
+
+            # 4. 제곱 페널티합 변수 정의 및 가중치 곱셈
+            ratio_sq_sum = model.NewIntVar(0, 3 * ((500 * r_total) ** 2), f'ratio_sq_sum_{e}')
+            model.Add(ratio_sq_sum == sq_D + sq_E + sq_N)
+
+            ratio_penalty = model.NewIntVar(0, 3 * ((500 * r_total) ** 2) * 1000, f'ratio_penalty_scaled_{e}')
+            model.AddMultiplicationEquality(
+                ratio_penalty, 
+                ratio_sq_sum, 
+                PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']]
+            )
             penalties.append(ratio_penalty)
 
     # 연속 N 근무에 대한 페널티
