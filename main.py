@@ -150,7 +150,9 @@ def main():
                 for emp, day in payload['vacations']:
                     new_vacations.append([int(emp), int(day) - 1]) # 파이썬은 0-indexed 이므로 -1
                 config['vacations'] = new_vacations
-                print(f"달력 휴가 정보 업데이트 완료: {len(new_vacations)}건")
+                
+                for emp, day in new_vacations:
+                    print(f"직원 {emp}의 휴가일: {day + 1}일")
                 
             # 3. 투입 기간(durations) 업데이트 추가
             if 'durations' in payload:
@@ -164,7 +166,13 @@ def main():
                     else:
                         # 0-indexed로 맞춰서 config 덮어쓰기
                         config['crew_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
-                print(f"크루 투입 기간(Durations) 업데이트 완료")
+
+                for emp_str, period in payload['durations'].items():
+                    start_day, end_day = period
+                    if start_day == 0:
+                        print(f"직원 {emp_str}은 투입되지 않습니다.")
+                    else:
+                        print(f"직원 {emp_str}의 투입 기간: {start_day}일 ~ {end_day}일")
 
             # 4. 근무 비율(ratios) 업데이트 추가
             if 'ratios' in payload:
@@ -175,7 +183,9 @@ def main():
                         'E': int(ratio_dict['E']),
                         'N': int(ratio_dict['N'])
                     }
-                print(f"크루 근무 비율(Ratios) 업데이트 완료")
+
+                for emp_str, ratio_dict in payload['ratios'].items():
+                    print(f"직원 {emp_str}의 근무 비율: D:{ratio_dict['D']} E:{ratio_dict['E']} N:{ratio_dict['N']}")
             
         except json.JSONDecodeError:
             print("경고: Payload 형식이 올바른 JSON이 아닙니다.")
