@@ -285,4 +285,33 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     status_str = solver.StatusName(status)
     objective_value = solver.ObjectiveValue() if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else -1
 
+    import json
+
+    # 스케줄 생성 성공 시 JSON 파일로 결과 저장
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        output_data = {
+            "status": status_str,
+            "schedule": {},
+            "stats": {}
+        }
+        for e in all_employees:
+            # 근무표 데이터
+            output_data["schedule"][e] = {d: (solution[e][d] if solution[e][d] != 'off' else '-') for d in all_days}
+            
+            # 통계 데이터 계산
+            avg_hours = sum(shift_hours.get(solution[e][d], 0) for d in all_days) / num_days * 7
+            d_count = sum(1 for d in all_days if solution[e][d] == 'D')
+            e_count = sum(1 for d in all_days if solution[e][d] == 'E')
+            n_count = sum(1 for d in all_days if solution[e][d] == 'N')
+            
+            output_data["stats"][e] = {
+                "avg_hours": round(avg_hours, 1),
+                "D": d_count,
+                "E": e_count,
+                "N": n_count
+            }
+            
+        with open('schedule_result.json', 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+
     return status_str, objective_value, solution, expected_hours_analysis

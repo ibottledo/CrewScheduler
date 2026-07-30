@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>근무표 생성기</title>
   <style>
-    body { font-family: -apple-system, sans-serif; padding: 15px; max-width: 500px; margin: 0 auto; background: #f8f9fa; }
+    body { font-family: -apple-system, sans-serif; padding: 15px; max-width: 800px; margin: 0 auto; background: #f8f9fa; }
     h2 { text-align: center; color: #1a365d; }
     .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
     label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; }
@@ -13,6 +13,8 @@
     .number-input { width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
     button { background: #2b6cb0; color: white; font-weight: bold; border: none; font-size: 16px; margin-top: 10px; cursor: pointer; }
     button:active { background: #2c5282; }
+    .btn-green { background: #38a169; }
+    .btn-green:active { background: #2f855a; }
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
     .day-btn { padding: 8px 2px; text-align: center; border: 1px solid #e2e8f0; background: white; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .day-btn.selected { background: #e53e3e; color: white; border-color: #c53030; font-weight: bold; }
@@ -21,12 +23,22 @@
     .status-badge { font-size: 12px; color: #2b6cb0; font-weight: bold; margin-bottom: 8px; }
     .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; }
     .divider { border-top: 1px solid #eee; margin: 15px 0; }
+
+    /* 결과 표 전용 스타일 */
+    .result-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; min-width: 700px; }
+    .result-table th, .result-table td { border: 1px solid #cbd5e0; padding: 6px 2px; }
+    .result-table th { background-color: #edf2f7; font-weight: bold; }
+    .shift-D { background-color: #feb2b2; font-weight: bold; color: #742a2a; } /* Day: 빨강 */
+    .shift-E { background-color: #9ae6b4; font-weight: bold; color: #22543d; } /* Evening: 초록 */
+    .shift-N { background-color: #90cdf4; font-weight: bold; color: #2a4365; } /* Night: 파랑 */
+    .shift-off { background-color: #ffffff; color: #a0aec0; } /* 휴무: 회색 - */
   </style>
 </head>
 <body>
 
   <h2>Scheduler</h2>
 
+  <!-- 토큰 및 연/월 설정부 -->
   <div class="card">
     <div id="tokenSection">
       <label>PAT (Personal Access Token)</label>
@@ -51,14 +63,15 @@
     </div>
   </div>
 
+  <!-- 직원 설정부 -->
   <div class="card">
     <label style="color: #2b6cb0; font-size: 16px;">설정할 인원 선택</label>
     <select id="crewSelect" onchange="loadCrewData()">
-      <option value="0">0번 크루</option><option value="1">1번 크루</option>
-      <option value="2">2번 크루</option><option value="3">3번 크루</option>
-      <option value="4">4번 크루</option><option value="5">5번 크루</option>   
-      <option value="6">6번 크루</option><option value="7">7번 크루</option>
-      <option value="8">8번 크루</option><option value="9">9번 크루</option>  
+      <option value="0">0번 직원</option><option value="1">1번 직원</option>
+      <option value="2">2번 직원</option><option value="3">3번 직원</option>
+      <option value="4">4번 직원</option><option value="5">5번 직원</option>   
+      <option value="6">6번 직원</option><option value="7">7번 직원</option>
+      <option value="8">8번 직원</option><option value="9">9번 직원</option>  
     </select>
 
     <div class="divider"></div>
@@ -82,22 +95,34 @@
     <div id="calendar" class="calendar-grid"></div>
   </div>
 
-  <button onclick="sendRequest()">근무표 생성</button>
+  <!-- 액션 버튼 -->
+  <button onclick="sendRequest()">🚀 근무표 생성 요청</button>
+
+  <!-- 결과 확인 영역 (추가된 부분) -->
+  <div class="card" style="margin-top: 20px;">
+    <h3 style="color: #2b6cb0; text-align: center; margin-top: 0; font-size: 18px;">📅 생성된 근무표 확인</h3>
+    <button class="btn-green" onclick="fetchResult()">🔄 근무표 결과 가져오기</button>
+    <div id="loadingText" class="hidden" style="color: #3182ce; text-align: center; margin-top: 10px; font-size: 14px;">
+      ⏳ 열심히 가져오는 중입니다... (생성 요청 후 약 15초 뒤에 눌러주세요!)
+    </div>
+    <div id="resultTableContainer" style="margin-top: 15px; overflow-x: auto;"></div>
+  </div>
 
   <script>
     // 상태 저장 변수들
     let vacationsMap = {};
-    let durationsMap = {}; // [0, 0] 이면 기간 미설정(크루 안 뜀) 의미
-    let ratiosMap = {};    // 기본 {D: 2, E: 1, N: 2}
+    let durationsMap = {}; 
+    let ratiosMap = {};    
     let daysInMonth = 31;
 
-    // 1. 페이지 로드 시 토큰 처리
     window.onload = function() {
       const urlParams = new URLSearchParams(window.location.search);
       const tokenFromUrl = urlParams.get('t');
 
       if (tokenFromUrl) {
-        localStorage.setItem('crew_scheduler_pat', tokenFromUrl.trim());
+        // dummy_ 자동 제거 로직 포함 (README 꼼수 적용 가능)
+        const cleanToken = tokenFromUrl.replace('dummy_', '').trim();
+        localStorage.setItem('crew_scheduler_pat', cleanToken);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
@@ -113,31 +138,26 @@
       initMonth();
     };
 
-    // 연/월 변경 시 일수 계산하고 초기화
     function initMonth() {
       const year = parseInt(document.getElementById('year').value);
       const month = parseInt(document.getElementById('month').value);
       daysInMonth = new Date(year, month, 0).getDate();
       
-      // 크루 정보 초기화 (기간 기본값: [0, 0] 빈칸 / 비율 기본값: D:2, E:1, N:2)
       for(let i = 0; i <= 9; i++) {
         if (!vacationsMap[i]) vacationsMap[i] = [];
-        if (!durationsMap[i]) durationsMap[i] = [0, 0]; // 초기 상태: 비어있음
-        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2}; // 초기 비율: 2:1:2
+        if (!durationsMap[i]) durationsMap[i] = [0, 0];
+        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
       }
       loadCrewData();
     }
 
-    // 선택된 크루의 데이터를 화면에 불러오기
     function loadCrewData() {
       const emp = document.getElementById('crewSelect').value;
       
-      // 기간 세팅 (0이면 빈칸으로 출력)
       const duration = durationsMap[emp] || [0, 0];
       document.getElementById('startDay').value = duration[0] === 0 ? '' : duration[0];
       document.getElementById('endDay').value = duration[1] === 0 ? '' : duration[1];
 
-      // 비율 세팅 (기본 2:1:2)
       const ratio = ratiosMap[emp] || {D: 2, E: 1, N: 2};
       document.getElementById('ratioD').value = ratio.D;
       document.getElementById('ratioE').value = ratio.E;
@@ -146,13 +166,11 @@
       renderCalendar();
     }
 
-    // 사용자가 입력 칸을 수정할 때 메모리에 저장
     function saveCrewData() {
       const emp = document.getElementById('crewSelect').value;
 
       let sd = parseInt(document.getElementById('startDay').value) || 0;
       let ed = parseInt(document.getElementById('endDay').value) || 0;
-      
       durationsMap[emp] = [sd, ed];
 
       ratiosMap[emp] = {
@@ -162,7 +180,6 @@
       };
     }
 
-    // 달력 그리기
     function renderCalendar() {
       const cal = document.getElementById('calendar');
       cal.innerHTML = '';
@@ -184,7 +201,7 @@
       }
     }
 
-    // API 요청
+    // 근무표 생성 요청 (GitHub Actions 트리거)
     async function sendRequest() {
       let token = document.getElementById('token').value.trim() || localStorage.getItem('crew_scheduler_pat');
       if (!token) return alert('❌ PAT를 입력해 주세요!');
@@ -215,12 +232,69 @@
         });
 
         if (res.ok) {
-          alert('✅ Actions 연산이 시작되었습니다!\nActions 탭에서 결과를 확인하세요.');
+          alert('✅ 스케줄러가 가동되었습니다!\n약 15초 뒤에 하단의 [🔄 근무표 결과 가져오기] 버튼을 눌러주세요.');
         } else {
           alert(`❌ 요청 실패 (상태 코드: ${res.status})\n권한을 확인하세요.`);
         }
       } catch (err) {
         alert('❌ 네트워크 오류가 발생했습니다.');
+      }
+    }
+
+    // 근무표 JSON 결과 가져오기 및 렌더링
+    async function fetchResult() {
+      const loadingText = document.getElementById("loadingText");
+      const container = document.getElementById("resultTableContainer");
+      
+      loadingText.classList.remove("hidden");
+      container.innerHTML = "";
+      
+      try {
+        // 브라우저 캐싱 방지를 위해 URL 끝에 현재 시간을 밀리초로 붙임
+        const cacheBuster = new Date().getTime();
+        const response = await fetch(`schedule_result.json?t=${cacheBuster}`);
+        
+        if (!response.ok) throw new Error("아직 결과 파일이 준비되지 않았습니다.\n생성 버튼을 누르셨다면 15초 정도 뒤에 다시 시도해주세요.");
+        
+        const data = await response.json();
+        
+        if (data.status !== 'OPTIMAL' && data.status !== 'FEASIBLE') {
+           throw new Error(`스케줄 생성에 실패했습니다. (상태: ${data.status})\n제약 조건(휴가 등)이 너무 빡빡한지 확인해주세요.`);
+        }
+
+        // --- 표 HTML 생성 ---
+        const daysCount = Object.keys(data.schedule["0"]).length;
+        
+        let html = `<table class="result-table">
+                      <tr>
+                        <th style="min-width: 50px;">직원</th>`;
+        
+        for(let d = 0; d < daysCount; d++) {
+            html += `<th>${d + 1}</th>`;
+        }
+        html += `<th style="min-width: 60px;">평균(주)</th><th style="min-width: 70px;">비율(D:E:N)</th></tr>`;
+        
+        for (let e in data.schedule) {
+            html += `<tr><td><strong>직원 ${e}</strong></td>`;
+            for(let d = 0; d < daysCount; d++) {
+                let shift = data.schedule[e][d];
+                // 근무 타입에 따른 클래스 부여 (색상 적용)
+                let shiftClass = shift === 'D' ? 'shift-D' : shift === 'E' ? 'shift-E' : shift === 'N' ? 'shift-N' : 'shift-off';
+                html += `<td class="${shiftClass}">${shift}</td>`;
+            }
+            
+            // 통계
+            let stats = data.stats[e];
+            html += `<td>${stats.avg_hours}h</td>`;
+            html += `<td>${stats.D}:${stats.E}:${stats.N}</td></tr>`;
+        }
+        html += `</table>`;
+        
+        container.innerHTML = html;
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        loadingText.classList.add("hidden");
       }
     }
   </script>
