@@ -4,6 +4,9 @@ on:
   repository_dispatch:
     types: [generate_schedule]
 
+permissions:
+  contents: write
+
 jobs:
   solve:
     runs-on: ubuntu-latest

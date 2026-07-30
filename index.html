@@ -100,7 +100,6 @@
 
   <!-- 결과 확인 영역 (추가된 부분) -->
   <div class="card" style="margin-top: 20px;">
-    <h3 style="color: #2b6cb0; text-align: center; margin-top: 0; font-size: 18px;">Crew Schedule</h3>
     <button class="btn-green" onclick="fetchResult()">근무표 가져오기</button>
     <div id="loadingText" class="hidden" style="color: #3182ce; text-align: center; margin-top: 10px; font-size: 14px;">
       ⏳ 열심히 가져오는 중입니다... (생성 요청 후 약 30초 뒤에 눌러주세요!)
@@ -232,7 +231,7 @@
         });
 
         if (res.ok) {
-          alert('✅ 스케줄러가 가동되었습니다!\n약 15초 뒤에 하단의 [🔄 근무표 결과 가져오기] 버튼을 눌러주세요.');
+          alert('✅ 스케줄러가 가동되었습니다!\n약 30초 뒤에 하단의 [근무표 가져오기] 버튼을 눌러주세요.');
         } else {
           alert(`❌ 요청 실패 (상태 코드: ${res.status})\n권한을 확인하세요.`);
         }
