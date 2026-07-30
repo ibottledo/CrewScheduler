@@ -2,10 +2,10 @@ from typing import Any, Dict, Tuple
 from ortools.sat.python import cp_model
 
 PENALTY_PRIORITY_MAP = {
-    "highest": 100,
-    "high":    10,
-    "medium":  1,
-    "low":     0
+    "highest": 1000,
+    "high":    100,
+    "medium":  10,
+    "low":     1
 }
 
 def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dict[int, Dict[int, str]], Dict[int, float]]:
