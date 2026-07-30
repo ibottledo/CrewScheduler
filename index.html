@@ -102,8 +102,8 @@
         }
       };
 
-      // GitHub Repository Dispatch API 호출 (저장소 owner/repo 명칭 수정 필요)
-      const res = await fetch('https://api.github.com/repos/본인아이디/15th-bdops-scheduler/dispatches', {
+      // GitHub Repository Dispatch API 호출
+      const res = await fetch('https://api.github.com/repos/ibottledo/CrewScheduler/dispatches', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
