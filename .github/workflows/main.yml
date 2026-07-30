@@ -29,6 +29,11 @@ on:
         - '10'
         - '11'
         - '12'
+      shift_ratio:
+        description: 'D:E:N 근무 비율 (예: 2:1:2). 비워두면 기본값 사용'
+        required: false
+        default: '2:1:2'
+        type: string
 
       crew_0_duration:
         description: '크루 0 활동 기간 (예: 1~31)'
@@ -149,6 +154,7 @@ jobs:
       env:
         YEAR: ${{ github.event.inputs.year }}
         MONTH: ${{ github.event.inputs.month }}
+        SHIFT_RATIO: ${{ github.event.inputs.shift_ratio }}
         CREW_0_DURATION: ${{ github.event.inputs.crew_0_duration }}
         CREW_0_VACATION: ${{ github.event.inputs.crew_0_vacation }}
         CREW_1_DURATION: ${{ github.event.inputs.crew_1_duration }}

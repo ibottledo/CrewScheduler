@@ -51,7 +51,7 @@ def calculate_total_penalty(config, solution):
                 vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
                 effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
                 if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
+                    my_expected_hours = -int(-(effective_crew_days_in_crew_period * 40 / 7.0))
             
             current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
                                      for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
@@ -147,6 +147,23 @@ def main():
             month = int(month_str)
             config['num_days'] = calendar.monthrange(year, month)[1]
 
+        # 근무 비율 처리
+        shift_ratio_str = os.environ.get('SHIFT_RATIO')
+        if shift_ratio_str:
+            try:
+                ratios = [int(r) for r in shift_ratio_str.split(':')]
+                if len(ratios) == 3:
+                    new_ratio = {'D': ratios[0], 'E': ratios[1], 'N': ratios[2]}
+                    num_employees = config.get('num_employees', 10)
+                    # 모든 직원의 비율을 새 비율로 업데이트
+                    config['shift_ratios'] = {str(i): new_ratio for i in range(num_employees)}
+                    print(f"근무 비율이 모든 직원에게 {shift_ratio_str} (D:E:N)으로 적용되었습니다.")
+                else:
+                    print(f"경고: 근무 비율({shift_ratio_str}) 형식이 잘못되었습니다. D:E:N 형식이어야 합니다.")
+            except ValueError:
+                print(f"경고: 근무 비율({shift_ratio_str})에 숫자가 아닌 값이 포함되어 있습니다.")
+
+
         # Actions 입력을 기반으로 새로운 crew_periods와 vacations를 생성
         # 1. 모든 직원에 대해 기본값("활동 없음")으로 초기화
         # config.json에 명시된 직원 수를 기준으로 합니다.
@@ -217,7 +234,7 @@ def main():
                 if solution.get(e, {}).get(d) == 'N' and solution.get(e, {}).get(d+1) == 'N':
                     employee_nn_count += 1
             if employee_nn_count > 1:
-                print(f"디버그: 직원 {e}가 {employee_nn_count}개의 'N N' 위반을 가집니다 (하드 제약 조건에 의해 1 이하여야 함).")
+                print(f"디버그: 직원 {e}가 {employee_nn_count}개의 'N N' 위반을 가집니다 (하드 제약 조건에 의해 1 이하여야 함). ")
             nn_violations_count += employee_nn_count
         print(f"디버그: 스케줄 내 총 'N N' 시퀀스 수: {nn_violations_count}")
 

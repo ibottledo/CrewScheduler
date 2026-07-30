@@ -65,11 +65,6 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddImplication(work[(e, d, 'E')], work[(e, d + 1, 'D')].Not())
             model.AddImplication(work[(e, d, 'D')], work[(e, d + 1, 'N')].Not())
 
-    # [신규] 직원은 N 근무 전날 D 근무를 할 수 없음. E->N은 허용됨.
-    # for e in all_employees:
-    #     for d in range(1, num_days):
-    #         model.AddImplication(work[(e, d, 'N')], work[(e, d - 1, 'D')].Not())
-
     # 최대 3일 연속 휴무 (더 간단하고 강력한 로직으로 복귀)
     for e in all_employees:
         for d in range(num_days - 3): 
@@ -88,11 +83,6 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         for s in shifts:
             for d in range(num_days - 3):
                 model.Add(sum(work[(e, d + i, s)] for i in range(4)) <= 3)
-
-    # [신규 하드 제약 조건] 3일 연속 N 근무 금지 (NNN 금지)
-    for e in all_employees:
-        for d in range(num_days - 2):
-            model.Add(work[(e, d, 'N')] + work[(e, d + 1, 'N')] + work[(e, d + 2, 'N')] <= 2)
 
     # [신규 하드 제약 조건] 직원당 월별 'N N' 시퀀스 최대 1회
     for e in all_employees:
