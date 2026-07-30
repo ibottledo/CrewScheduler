@@ -137,6 +137,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 model.Add(over_40h_avg_var >= (7 * total_hours) - (40 * effective_days))
                 
                 over_40h_avg_penalty = model.NewIntVar(0, 7 * 500 * 1000, f'over_40h_avg_penalty_{e}')
+                # 크루기간 동안 주 평균 근무시간이 40시간을 초과하면 페널티 부여
                 model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
                 penalties.append(over_40h_avg_penalty)
 
@@ -161,6 +162,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 model.Add(over >= crew_hours - my_expected_hours)
 
                 over_penalty = model.NewIntVar(0, 500 * 1000, f'over_penalty_{e}')
+                # 크루기간 동안 근무시간이 기대치보다 많으면 페널티 부여
                 model.AddMultiplicationEquality(over_penalty, over, PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']])
                 penalties.append(over_penalty)
                 over_vars.append(over)
@@ -169,6 +171,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
 
     # --- 모든 직원에 대한 근무 비율 페널티 (선형 최적화) ---
     ratio_errors = []
+    # 근무 비율 페널티
     ratio_priority = PENALTY_PRIORITY_MAP.get(penalties_config.get('shift_ratio_priority', 'medium'), 10)
 
     for e in all_employees:
@@ -252,9 +255,12 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         daily_fairness_var = model.NewIntVar(0, 24 * 100, 'daily_fairness_rate_var')
         model.Add(daily_fairness_var == max_daily_rate - min_daily_rate)
         
-        daily_fairness_penalty = model.NewIntVar(0, (24 * 100) * 1000, 'daily_fairness_rate_penalty')
-        model.AddMultiplicationEquality(daily_fairness_penalty, daily_fairness_var, PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']])
-        penalties.append(daily_fairness_penalty)
+        # [핵심] 근무시간 균등화가 '비율 맞추기'보다 수학적으로 무조건 최우선이 되도록 가중치 100배 폭격
+        fairness_base_priority = PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
+        absolute_fairness_weight = fairness_base_priority * 100
+        
+        # 복잡한 AddMultiplicationEquality 대신 변수에 상수를 바로 곱해서 패널티에 추가 (연산 속도 증가)
+        penalties.append(daily_fairness_var * absolute_fairness_weight)
 
     # --- [5] 목적 함수(Objective) 설정 및 문제 해결 ---
     model.Minimize(sum(penalties))
