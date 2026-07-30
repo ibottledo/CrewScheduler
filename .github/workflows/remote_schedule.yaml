@@ -3,6 +3,7 @@ name: Remote Schedule Generator
 on:
   repository_dispatch:
     types: [generate_schedule]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,6 +27,15 @@ jobs:
 
       - name: Install dependencies
         run: uv pip install --system ortools pandas
+
+      - name: Save web payload to file
+        env:
+          PAYLOAD_DATA: ${{ toJson(github.event.client_payload) }}
+        run: |
+          echo "$PAYLOAD_DATA" > input.json
+          echo "==== 웹에서 전달받은 데이터 ===="
+          cat input.json
+          echo "==============================="
 
       - name: Run Scheduler
         run: python main.py

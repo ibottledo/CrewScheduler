@@ -38,7 +38,7 @@
         "shift_ratio_priority": "medium",
         "max_over_staffing_priority": "low",
         "non_crew_work_priority": "low",
-        "fairness_of_non_crew_work_priority": "high"
+        "fairness_of_non_crew_work_priority": "highest"
     },
     "solver_time_limit": 45.0
 }
