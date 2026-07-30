@@ -96,14 +96,14 @@
   </div>
 
   <!-- 액션 버튼 -->
-  <button onclick="sendRequest()">🚀 근무표 생성 요청</button>
+  <button onclick="sendRequest()">근무표 생성</button>
 
   <!-- 결과 확인 영역 (추가된 부분) -->
   <div class="card" style="margin-top: 20px;">
-    <h3 style="color: #2b6cb0; text-align: center; margin-top: 0; font-size: 18px;">📅 생성된 근무표 확인</h3>
-    <button class="btn-green" onclick="fetchResult()">🔄 근무표 결과 가져오기</button>
+    <h3 style="color: #2b6cb0; text-align: center; margin-top: 0; font-size: 18px;">Crew Schedule</h3>
+    <button class="btn-green" onclick="fetchResult()">근무표 가져오기</button>
     <div id="loadingText" class="hidden" style="color: #3182ce; text-align: center; margin-top: 10px; font-size: 14px;">
-      ⏳ 열심히 가져오는 중입니다... (생성 요청 후 약 15초 뒤에 눌러주세요!)
+      ⏳ 열심히 가져오는 중입니다... (생성 요청 후 약 30초 뒤에 눌러주세요!)
     </div>
     <div id="resultTableContainer" style="margin-top: 15px; overflow-x: auto;"></div>
   </div>
