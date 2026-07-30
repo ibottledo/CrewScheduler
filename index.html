@@ -52,7 +52,7 @@
   </div>
 
   <div class="card">
-    <label style="color: #2b6cb0; font-size: 16px;">👤 설정할 크루 선택</label>
+    <label style="color: #2b6cb0; font-size: 16px;">설정할 인원 선택</label>
     <select id="crewSelect" onchange="loadCrewData()">
       <option value="0">0번 크루</option><option value="1">1번 크루</option>
       <option value="2">2번 크루</option><option value="3">3번 크루</option>
@@ -64,16 +64,13 @@
     <div class="divider"></div>
 
     <!-- 추가된 설정 UI: 기간 및 비율 -->
-    <label>⏱️ 투입 기간 설정</label>
+    <label>크루 기간 설정</label>
     <div class="setting-row">
       <input type="number" id="startDay" class="number-input" onchange="saveCrewData()"> 일 ~ 
       <input type="number" id="endDay" class="number-input" onchange="saveCrewData()"> 일
-      <label style="margin-left: 10px; font-weight: normal; font-size: 12px;">
-        <input type="checkbox" id="isOff" onchange="toggleOff()"> 투입 안 함 (Off)
-      </label>
     </div>
 
-    <label>⚖️ 근무 비율 (D : E : N)</label>
+    <label>선호 근무 비율 (D : E : N)</label>
     <div class="setting-row">
       D: <input type="number" id="ratioD" class="number-input" onchange="saveCrewData()">
       E: <input type="number" id="ratioE" class="number-input" onchange="saveCrewData()">
@@ -82,11 +79,11 @@
 
     <div class="divider"></div>
 
-    <label>🏖️ 휴가 날짜 터치하여 선택</label>
+    <label>휴가 날짜 선택</label>
     <div id="calendar" class="calendar-grid"></div>
   </div>
 
-  <button onclick="sendRequest()">🚀 근무표 생성 요청하기</button>
+  <button onclick="sendRequest()">근무표 생성</button>
 
   <script>
     // 상태 저장 변수들
