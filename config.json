@@ -33,9 +33,9 @@
     "penalties": {
         "_comment_levels": "highest > high > medium > low. Higher priority means the solver will try harder to avoid this penalty.",
         "crew_over_40h_avg_priority": "highest",
-        "consecutive_n_shifts_priority": "low",
-        "fairness_of_non_crew_work_priority": "medium",
         "over_staffing_priority": "highest",
+        "consecutive_n_shifts_priority": "medium",
+        "fairness_of_non_crew_work_priority": "medium",
         "max_over_staffing_priority": "low",
         "non_crew_work_priority": "low",
         "shift_ratio_priority": "low"
