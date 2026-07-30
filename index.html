@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>근무표 생성기</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 15px; max-width: 500px; margin: 0 auto; background: #f8f9fa; }
+    h2 { text-align: center; color: #1a365d; }
+    .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    label { font-weight: bold; display: block; margin-bottom: 5px; }
+    select, input, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
+    button { background: #2b6cb0; color: white; font-weight: bold; border: none; font-size: 16px; margin-top: 10px; }
+    button:active { background: #2c5282; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
+    .day-btn { padding: 8px 2px; text-align: center; border: 1px solid #e2e8f0; background: white; border-radius: 4px; font-size: 12px; }
+    .day-btn.selected { background: #e53e3e; color: white; border-color: #c53030; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h2>Scheduler</h2>
+
+  <div class="card">
+    <label>PAT (Personal Access Token)</label>
+    <input type="password" id="token" placeholder="GitHub PAT 입력">
+    
+    <div style="display: flex; gap: 10px;">
+      <div style="flex:1;">
+        <label>연도</label>
+        <select id="year"><option value="2026">2026년</option><option value="2027">2027년</option></select>
+      </div>
+      <div style="flex:1;">
+        <label>월</label>
+        <select id="month" onchange="renderCalendar()">
+          <option value="8">8월</option><option value="9">9월</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>휴가자 선택 (크루 번호)</label>
+    <select id="crewSelect" onchange="renderCalendar()">
+      <option value="0">0번 크루</option>
+      <option value="1">1번 크루</option>
+      <option value="2">2번 크루</option>
+      <option value="3">3번 크루</option>
+      <option value="6">6번 크루</option>
+    </select>
+
+    <label>휴가 날짜 터치하여 선택</label>
+    <div id="calendar" class="calendar-grid"></div>
+  </div>
+
+  <button onclick="sendRequest()">🚀 근무표 생성 요청하기</button>
+
+  <script>
+    // 각 크루별 선택된 휴가일 저장용 객체 { 0: [5, 6], 3: [10, 11] }
+    let vacationsMap = {};
+
+    function renderCalendar() {
+      const cal = document.getElementById('calendar');
+      cal.innerHTML = '';
+      const emp = document.getElementById('crewSelect').value;
+      if (!vacationsMap[emp]) vacationsMap[emp] = [];
+
+      for (let day = 1; day <= 30; day++) {
+        const btn = document.createElement('div');
+        btn.className = 'day-btn' + (vacationsMap[emp].includes(day) ? ' selected' : '');
+        btn.innerText = day + '일';
+        btn.onclick = () => {
+          if (vacationsMap[emp].includes(day)) {
+            vacationsMap[emp] = vacationsMap[emp].filter(d => d !== day);
+          } else {
+            vacationsMap[emp].push(day);
+          }
+          renderCalendar();
+        };
+        cal.appendChild(btn);
+      }
+    }
+
+    async function sendRequest() {
+      const token = document.getElementById('token').value;
+      if (!token) return alert('GitHub Personal Access Token을 입력해주세요!');
+
+      // 백엔드로 보낼 데이터 정리
+      let vacationList = [];
+      for (let emp in vacationsMap) {
+        vacationsMap[emp].forEach(day => {
+          vacationList.push([parseInt(emp), day]);
+        });
+      }
+
+      const payload = {
+        event_type: 'generate_schedule',
+        client_payload: {
+          year: parseInt(document.getElementById('year').value),
+          month: parseInt(document.getElementById('month').value),
+          vacations: vacationList
+        }
+      };
+
+      // GitHub Repository Dispatch API 호출 (저장소 owner/repo 명칭 수정 필요)
+      const res = await fetch('https://api.github.com/repos/본인아이디/15th-bdops-scheduler/dispatches', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        alert('✅ Actions 연산이 시작되었습니다!\nActions 탭에서 결과를 확인하세요.');
+      } else {
+        alert('❌ 요청 실패. 토큰 권한이나 저장소 이름을 확인하세요.');
+      }
+    }
+
+    renderCalendar();
+  </script>
+</body>
+</html>

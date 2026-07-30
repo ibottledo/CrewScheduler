@@ -61,7 +61,6 @@ def calculate_total_penalty(config, solution):
         
         # --- Crew 멤버가 아닌 직원에 대한 페널티 ---
         else:
-            # 비-Crew 근무는 공정성 및 총 비-crew 시간 페널티로 처리됨
             pass # 나중에 계산됨
 
     # --- 모든 직원에 대한 페널티 ---
@@ -84,8 +83,7 @@ def calculate_total_penalty(config, solution):
             
             total_calculated_penalty += (abs_diff_D + abs_diff_E + abs_diff_N) * PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']]
 
-    # 최대 초과 투입 시간에 대한 페널티 (이미 계산된 'over' 변수들의 최대값)
-    # 솔루션으로부터 max_over를 다시 계산해야 함
+    # 최대 초과 투입 시간에 대한 페널티
     current_over_values = []
     for e in all_employees:
         start_d, end_d = crew_periods.get(e, (-1, -2))
@@ -118,7 +116,6 @@ def calculate_total_penalty(config, solution):
         max_nc = max(current_non_crew_hours)
         min_nc = min(current_non_crew_hours)
         total_calculated_penalty += (max_nc - min_nc) * PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
-        
         total_calculated_penalty += sum(current_non_crew_hours) * PENALTY_PRIORITY_MAP[penalties_config['non_crew_work_priority']]
     
     return total_calculated_penalty
@@ -131,23 +128,45 @@ def main():
     with open('config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # --- GitHub Actions 입력값 처리 (환경 변수가 있을 경우) ---
-    year_str = os.environ.get('YEAR')
-    month_str = os.environ.get('MONTH')
+    # --- [추가/수정됨] 데이터 유입 경로 확인 ---
+    payload_raw = os.environ.get('PAYLOAD')  # 웹페이지(JS)에서 보내는 JSON 데이터
+    year_str = os.environ.get('YEAR')        # Actions 수동 실행 시 입력하는 환경변수
 
-    # Actions에서 실행되었는지 확인 (YEAR 환경변수 존재 여부로 판단)
-    is_running_on_actions = year_str is not None
+    # A. 웹페이지 달력(GitHub Pages)에서 버튼을 눌러 실행된 경우
+    if payload_raw and payload_raw.strip() not in ('', '{}'):
+        print("--- 🌐 웹(Payload) 요청 감지: 웹 달력 입력값으로 설정 업데이트 ---")
+        try:
+            payload = json.loads(payload_raw)
+            
+            # 연/월 적용
+            if 'year' in payload and 'month' in payload:
+                year = int(payload['year'])
+                month = int(payload['month'])
+                config['num_days'] = calendar.monthrange(year, month)[1]
+            
+            # 웹에서 선택한 휴가일 적용 (웹은 [크루번호, 날짜(1~31)] 형태이므로 0-indexed 처리)
+            if 'vacations' in payload:
+                new_vacations = []
+                for emp, day in payload['vacations']:
+                    new_vacations.append([int(emp), int(day) - 1])
+                config['vacations'] = new_vacations
+                print(f"달력 휴가 정보 업데이트 완료: {len(new_vacations)}건")
+                
+            # 웹 UI에는 아직 없지만, 향후 기간/비율 추가 시 대비하여 기존 config값(config.json)을 그대로 사용하도록 냅둠.
+            
+        except json.JSONDecodeError:
+            print("경고: Payload 형식이 올바른 JSON이 아닙니다.")
 
-    if is_running_on_actions:
-        print("--- GitHub Actions 환경 감지: 입력값으로 설정 업데이트 ---")
+    # B. 기존에 구현해두신 GitHub Actions 수동(workflow_dispatch) 실행인 경우
+    elif year_str is not None:
+        print("--- ⚙️ GitHub Actions 환경 감지: 수동 입력값으로 설정 업데이트 ---")
         
-        # 연/월이 입력되었다면, 해당 월의 일자로 num_days를 업데이트
+        month_str = os.environ.get('MONTH')
         if year_str and month_str:
             year = int(year_str)
             month = int(month_str)
             config['num_days'] = calendar.monthrange(year, month)[1]
 
-        # 근무 비율 처리
         shift_ratio_str = os.environ.get('SHIFT_RATIO')
         if shift_ratio_str:
             try:
@@ -155,62 +174,53 @@ def main():
                 if len(ratios) == 3:
                     new_ratio = {'D': ratios[0], 'E': ratios[1], 'N': ratios[2]}
                     num_employees = config.get('num_employees', 10)
-                    # 모든 직원의 비율을 새 비율로 업데이트
                     config['shift_ratios'] = {str(i): new_ratio for i in range(num_employees)}
                     print(f"근무 비율이 모든 직원에게 {shift_ratio_str} (D:E:N)으로 적용되었습니다.")
                 else:
-                    print(f"경고: 근무 비율({shift_ratio_str}) 형식이 잘못되었습니다. D:E:N 형식이어야 합니다.")
+                    print(f"경고: 근무 비율({shift_ratio_str}) 형식이 잘못되었습니다.")
             except ValueError:
-                print(f"경고: 근무 비율({shift_ratio_str})에 숫자가 아닌 값이 포함되어 있습니다.")
+                print(f"경고: 근무 비율({shift_ratio_str})에 오류가 있습니다.")
 
-
-        # Actions 입력을 기반으로 새로운 crew_periods와 vacations를 생성
-        # 1. 모든 직원에 대해 기본값("활동 없음")으로 초기화
-        # config.json에 명시된 직원 수를 기준으로 합니다.
         num_employees_from_config = config.get('num_employees', 10)
         new_crew_periods = {i: [-1, -2] for i in range(num_employees_from_config)}
         new_vacations = []
 
-        # 2. 입력된 정보로 해당 직원 정보 업데이트
-        for i in range(10): # 0~9번 크루에 대한 입력을 확인
+        for i in range(10):
             duration = os.environ.get(f'CREW_{i}_DURATION')
             vacation = os.environ.get(f'CREW_{i}_VACATION')
             ratio = os.environ.get(f'CREW_{i}_RATIO')
             
-            # 기간 정보 처리
             if duration and '~' in duration:
                 try:
                     start_day, end_day = duration.split('~')
-                    # 정수형 키를 사용합니다.
                     new_crew_periods[i] = [int(start_day) - 1, int(end_day) - 1]
                 except (ValueError, IndexError):
-                    print(f"경고: 크루 {i}의 기간({duration}) 형식이 잘못되었습니다.")
+                    print(f"경고: 크루 {i}의 기간({duration}) 오류.")
             
-            # 휴가 정보 처리
             if vacation:
                 for day in vacation.split(','):
                     day = day.strip()
                     if day:
                         try:
-                            # 정수형 키를 사용합니다.
                             new_vacations.append([i, int(day) - 1])
                         except ValueError:
-                            print(f"경고: 크루 {i}의 휴가일({day}) 형식이 잘못되었습니다.")
+                            pass
 
             if ratio and ':' in ratio:
                 try:
                     d_ratio, e_ratio, n_ratio = map(int, ratio.split(':'))
                     config['shift_ratios'][str(i)] = {'D': d_ratio, 'E': e_ratio, 'N': n_ratio}
                 except ValueError:
-                    print(f"경고: 크루 {i}의 근무 비율({ratio}) 형식이 잘못되었습니다.")
+                    pass
 
-        # 3. 원본 config를 새로운 정보로 덮어쓰기
         config['crew_periods'] = new_crew_periods
         config['vacations'] = new_vacations
 
+    else:
+        print("--- 💻 로컬 환경 감지: config.json 원본 설정으로 실행합니다 ---")
+
     print("--- 설정 로드 완료 ---")
     print(f"{config['num_employees']}명의 직원을 대상으로 {config['num_days']}일간의 스케줄링을 진행합니다.")
-    print(f"솔버 시간 제한: {config['solver_time_limit']}초.")
     print("--- 솔버 시작 ---")
 
     # 2. 스케줄링 엔진 실행
@@ -230,11 +240,11 @@ def main():
         else:
             print("\n--- 검증 성공: 모든 하드 제약 조건을 만족합니다. ---")
 
-        # 4. 총 페널티를 직접 계산하고 출력
+        # 4. 총 페널티 직접 계산
         calculated_penalty = calculate_total_penalty(config, solution)
         print(f"직접 계산한 총 페널티: {calculated_penalty:.2f}")
 
-        # 5. [디버그] 솔루션에서 NN 위반을 직접 카운트하여 하드 제약 조건 확인
+        # 5. [디버그] N-N 위반 카운트
         nn_violations_count = 0
         for e in range(config['num_employees']):
             employee_nn_count = 0
@@ -242,13 +252,12 @@ def main():
                 if solution.get(e, {}).get(d) == 'N' and solution.get(e, {}).get(d+1) == 'N':
                     employee_nn_count += 1
             if employee_nn_count > 1:
-                print(f"디버그: 직원 {e}가 {employee_nn_count}개의 'N N' 위반을 가집니다 (하드 제약 조건에 의해 1 이하여야 함). ")
+                print(f"디버그: 직원 {e}가 {employee_nn_count}개의 'N N' 위반을 가집니다.")
             nn_violations_count += employee_nn_count
         print(f"디버그: 스케줄 내 총 'N N' 시퀀스 수: {nn_violations_count}")
 
         # 6. 스케줄 출력
         print_schedule(config, solution, expected_hours)
-
     else:
         print("주어진 제약 조건 하에서 유효한 스케줄을 찾을 수 없습니다.")
 
@@ -292,7 +301,6 @@ def print_schedule(config, solution, expected_hours):
                 shift = solution.get(e, {}).get(d, 'ERR')
                 schedule_str += f" {shift if shift != 'off' else '-':<1} "
         
-        # 통계 계산
         counts = {s: 0 for s in config['shifts']}
         total_hours = 0
         crew_hours = 0
