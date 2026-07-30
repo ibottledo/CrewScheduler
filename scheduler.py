@@ -256,8 +256,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         model.Add(daily_fairness_var == max_daily_rate - min_daily_rate)
         
         # [핵심] 근무시간 균등화가 '비율 맞추기'보다 수학적으로 무조건 최우선이 되도록 가중치 100배 폭격
-        fairness_base_priority = PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
-        absolute_fairness_weight = fairness_base_priority * 100
+        absolute_fairness_weight = PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
         
         # 복잡한 AddMultiplicationEquality 대신 변수에 상수를 바로 곱해서 패널티에 추가 (연산 속도 증가)
         penalties.append(daily_fairness_var * absolute_fairness_weight)

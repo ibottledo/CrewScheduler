@@ -253,7 +253,7 @@
         const cacheBuster = new Date().getTime();
         const response = await fetch(`schedule_result.json?t=${cacheBuster}`);
         
-        if (!response.ok) throw new Error("아직 결과 파일이 준비되지 않았습니다.\n생성 버튼을 누르셨다면 15초 정도 뒤에 다시 시도해주세요.");
+        if (!response.ok) throw new Error("아직 결과 파일이 준비되지 않았습니다.\n생성 버튼을 누르셨다면 30초 정도 뒤에 다시 시도해주세요.");
         
         const data = await response.json();
         
