@@ -10,8 +10,8 @@
     .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
     label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; }
     select, input[type="text"], input[type="password"], button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
-    .number-input { width: 50px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
-    button { background: #2b6cb0; color: white; font-weight: bold; border: none; font-size: 16px; margin-top: 10px; }
+    .number-input { width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
+    button { background: #2b6cb0; color: white; font-weight: bold; border: none; font-size: 16px; margin-top: 10px; cursor: pointer; }
     button:active { background: #2c5282; }
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
     .day-btn { padding: 8px 2px; text-align: center; border: 1px solid #e2e8f0; background: white; border-radius: 4px; font-size: 12px; cursor: pointer; }
@@ -63,11 +63,10 @@
 
     <div class="divider"></div>
 
-    <!-- 추가된 설정 UI: 기간 및 비율 -->
-    <label>크루 기간 설정</label>
+    <label>크루 기간 설정 (미입력 시 크루 안 뜀)</label>
     <div class="setting-row">
-      <input type="number" id="startDay" class="number-input" onchange="saveCrewData()"> 일 ~ 
-      <input type="number" id="endDay" class="number-input" onchange="saveCrewData()"> 일
+      <input type="number" id="startDay" class="number-input" placeholder="시작일" onchange="saveCrewData()"> 일 ~ 
+      <input type="number" id="endDay" class="number-input" placeholder="종료일" onchange="saveCrewData()"> 일
     </div>
 
     <label>선호 근무 비율 (D : E : N)</label>
@@ -88,8 +87,8 @@
   <script>
     // 상태 저장 변수들
     let vacationsMap = {};
-    let durationsMap = {}; // 예: { "0": [1, 31], "1": [0, 0] } (0,0 은 off 의미)
-    let ratiosMap = {};    // 예: { "0": {D: 2, E: 1, N: 2} }
+    let durationsMap = {}; // [0, 0] 이면 기간 미설정(크루 안 뜀) 의미
+    let ratiosMap = {};    // 기본 {D: 2, E: 1, N: 2}
     let daysInMonth = 31;
 
     // 1. 페이지 로드 시 토큰 처리
@@ -120,11 +119,11 @@
       const month = parseInt(document.getElementById('month').value);
       daysInMonth = new Date(year, month, 0).getDate();
       
-      // 크루 정보 초기화(기본값 채우기)
+      // 크루 정보 초기화 (기간 기본값: [0, 0] 빈칸 / 비율 기본값: D:2, E:1, N:2)
       for(let i = 0; i <= 9; i++) {
         if (!vacationsMap[i]) vacationsMap[i] = [];
-        if (!durationsMap[i]) durationsMap[i] = [1, daysInMonth];
-        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
+        if (!durationsMap[i]) durationsMap[i] = [0, 0]; // 초기 상태: 비어있음
+        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2}; // 초기 비율: 2:1:2
       }
       loadCrewData();
     }
@@ -133,24 +132,13 @@
     function loadCrewData() {
       const emp = document.getElementById('crewSelect').value;
       
-      // 기간 세팅
-      const duration = durationsMap[emp];
-      if (duration[0] === 0) { // Off 상태
-        document.getElementById('isOff').checked = true;
-        document.getElementById('startDay').disabled = true;
-        document.getElementById('endDay').disabled = true;
-        document.getElementById('startDay').value = '';
-        document.getElementById('endDay').value = '';
-      } else {
-        document.getElementById('isOff').checked = false;
-        document.getElementById('startDay').disabled = false;
-        document.getElementById('endDay').disabled = false;
-        document.getElementById('startDay').value = duration[0];
-        document.getElementById('endDay').value = duration[1];
-      }
+      // 기간 세팅 (0이면 빈칸으로 출력)
+      const duration = durationsMap[emp] || [0, 0];
+      document.getElementById('startDay').value = duration[0] === 0 ? '' : duration[0];
+      document.getElementById('endDay').value = duration[1] === 0 ? '' : duration[1];
 
-      // 비율 세팅
-      const ratio = ratiosMap[emp];
+      // 비율 세팅 (기본 2:1:2)
+      const ratio = ratiosMap[emp] || {D: 2, E: 1, N: 2};
       document.getElementById('ratioD').value = ratio.D;
       document.getElementById('ratioE').value = ratio.E;
       document.getElementById('ratioN').value = ratio.N;
@@ -161,29 +149,17 @@
     // 사용자가 입력 칸을 수정할 때 메모리에 저장
     function saveCrewData() {
       const emp = document.getElementById('crewSelect').value;
-      const isOff = document.getElementById('isOff').checked;
 
-      if (isOff) {
-        durationsMap[emp] = [0, 0]; // 백엔드에 off로 전달할 약속 기호
-      } else {
-        let sd = parseInt(document.getElementById('startDay').value) || 1;
-        let ed = parseInt(document.getElementById('endDay').value) || daysInMonth;
-        durationsMap[emp] = [sd, ed];
-      }
+      let sd = parseInt(document.getElementById('startDay').value) || 0;
+      let ed = parseInt(document.getElementById('endDay').value) || 0;
+      
+      durationsMap[emp] = [sd, ed];
 
       ratiosMap[emp] = {
         D: parseInt(document.getElementById('ratioD').value) || 0,
         E: parseInt(document.getElementById('ratioE').value) || 0,
         N: parseInt(document.getElementById('ratioN').value) || 0
       };
-    }
-
-    // 투입 안함(Off) 체크박스 동작
-    function toggleOff() {
-      const isOff = document.getElementById('isOff').checked;
-      document.getElementById('startDay').disabled = isOff;
-      document.getElementById('endDay').disabled = isOff;
-      saveCrewData();
     }
 
     // 달력 그리기
@@ -215,21 +191,19 @@
 
       localStorage.setItem('crew_scheduler_pat', token);
 
-      // 1. 휴가 리스트 정제
       let vacationList = [];
       for (let emp in vacationsMap) {
         vacationsMap[emp].forEach(day => vacationList.push([parseInt(emp), day]));
       }
 
-      // Payload(백엔드로 보낼 화물) 구성
       const payload = {
         event_type: 'generate_schedule',
         client_payload: {
           year: parseInt(document.getElementById('year').value),
           month: parseInt(document.getElementById('month').value),
           vacations: vacationList,
-          durations: durationsMap,  // 새롭게 추가됨
-          ratios: ratiosMap         // 새롭게 추가됨
+          durations: durationsMap,
+          ratios: ratiosMap
         }
       };
 
