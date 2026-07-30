@@ -175,6 +175,7 @@ def main():
         for i in range(10): # 0~9번 크루에 대한 입력을 확인
             duration = os.environ.get(f'CREW_{i}_DURATION')
             vacation = os.environ.get(f'CREW_{i}_VACATION')
+            ratio = os.environ.get(f'CREW_{i}_RATIO')
             
             # 기간 정보 처리
             if duration and '~' in duration:
@@ -195,6 +196,13 @@ def main():
                             new_vacations.append([i, int(day) - 1])
                         except ValueError:
                             print(f"경고: 크루 {i}의 휴가일({day}) 형식이 잘못되었습니다.")
+
+            if ratio and ':' in ratio:
+                try:
+                    d_ratio, e_ratio, n_ratio = map(int, ratio.split(':'))
+                    config['shift_ratios'][str(i)] = {'D': d_ratio, 'E': e_ratio, 'N': n_ratio}
+                except ValueError:
+                    print(f"경고: 크루 {i}의 근무 비율({ratio}) 형식이 잘못되었습니다.")
 
         # 3. 원본 config를 새로운 정보로 덮어쓰기
         config['crew_periods'] = new_crew_periods
