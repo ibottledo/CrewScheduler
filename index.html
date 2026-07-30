@@ -8,17 +8,19 @@
     body { font-family: -apple-system, sans-serif; padding: 15px; max-width: 500px; margin: 0 auto; background: #f8f9fa; }
     h2 { text-align: center; color: #1a365d; }
     .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    label { font-weight: bold; display: block; margin-bottom: 5px; }
-    select, input, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
+    label { font-weight: bold; display: block; margin-bottom: 5px; font-size: 14px; }
+    select, input[type="text"], input[type="password"], button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 10px; }
+    .number-input { width: 50px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
     button { background: #2b6cb0; color: white; font-weight: bold; border: none; font-size: 16px; margin-top: 10px; }
     button:active { background: #2c5282; }
     .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
     .day-btn { padding: 8px 2px; text-align: center; border: 1px solid #e2e8f0; background: white; border-radius: 4px; font-size: 12px; cursor: pointer; }
     .day-btn.selected { background: #e53e3e; color: white; border-color: #c53030; font-weight: bold; }
     
-    /* 토큰 인증이 완료되었을 때 PAT 입력 칸을 깔끔하게 숨기기 위한 스타일 */
     .hidden { display: none !important; }
     .status-badge { font-size: 12px; color: #2b6cb0; font-weight: bold; margin-bottom: 8px; }
+    .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; }
+    .divider { border-top: 1px solid #eee; margin: 15px 0; }
   </style>
 </head>
 <body>
@@ -35,64 +37,71 @@
     <div style="display: flex; gap: 10px;">
       <div style="flex:1;">
         <label>연도</label>
-        <select id="year" onchange="renderCalendar()">
-          <option value="2026">2026년</option>
-          <option value="2027">2027년</option>
-        </select>
+        <select id="year" onchange="initMonth()"><option value="2026">2026년</option><option value="2027">2027년</option></select>
       </div>
       <div style="flex:1;">
         <label>월</label>
-        <select id="month" onchange="renderCalendar()">
-          <option value="1">1월</option>
-          <option value="2">2월</option>
-          <option value="3">3월</option>
-          <option value="4">4월</option>
-          <option value="5">5월</option>
-          <option value="6">6월</option>
-          <option value="7">7월</option> 
-          <option value="8">8월</option>
-          <option value="9">9월</option>
-          <option value="10">10월</option>
-          <option value="11">11월</option>
-          <option value="12">12월</option>
+        <select id="month" onchange="initMonth()">
+          <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
+          <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
+          <option value="7">7월</option><option value="8" selected>8월</option><option value="9">9월</option>
+          <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
         </select>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <label>휴가자 선택 (크루 번호)</label>
-    <select id="crewSelect" onchange="renderCalendar()">
-      <option value="0">0번 크루</option>
-      <option value="1">1번 크루</option>
-      <option value="2">2번 크루</option>
-      <option value="3">3번 크루</option>
-      <option value="4">4번 크루</option>
-      <option value="5">5번 크루</option>   
-      <option value="6">6번 크루</option>
-      <option value="7">7번 크루</option>
-      <option value="8">8번 크루</option>
-      <option value="9">9번 크루</option>  
+    <label style="color: #2b6cb0; font-size: 16px;">👤 설정할 크루 선택</label>
+    <select id="crewSelect" onchange="loadCrewData()">
+      <option value="0">0번 크루</option><option value="1">1번 크루</option>
+      <option value="2">2번 크루</option><option value="3">3번 크루</option>
+      <option value="4">4번 크루</option><option value="5">5번 크루</option>   
+      <option value="6">6번 크루</option><option value="7">7번 크루</option>
+      <option value="8">8번 크루</option><option value="9">9번 크루</option>  
     </select>
 
-    <label>휴가 날짜 터치하여 선택</label>
+    <div class="divider"></div>
+
+    <!-- 추가된 설정 UI: 기간 및 비율 -->
+    <label>⏱️ 투입 기간 설정</label>
+    <div class="setting-row">
+      <input type="number" id="startDay" class="number-input" onchange="saveCrewData()"> 일 ~ 
+      <input type="number" id="endDay" class="number-input" onchange="saveCrewData()"> 일
+      <label style="margin-left: 10px; font-weight: normal; font-size: 12px;">
+        <input type="checkbox" id="isOff" onchange="toggleOff()"> 투입 안 함 (Off)
+      </label>
+    </div>
+
+    <label>⚖️ 근무 비율 (D : E : N)</label>
+    <div class="setting-row">
+      D: <input type="number" id="ratioD" class="number-input" onchange="saveCrewData()">
+      E: <input type="number" id="ratioE" class="number-input" onchange="saveCrewData()">
+      N: <input type="number" id="ratioN" class="number-input" onchange="saveCrewData()">
+    </div>
+
+    <div class="divider"></div>
+
+    <label>🏖️ 휴가 날짜 터치하여 선택</label>
     <div id="calendar" class="calendar-grid"></div>
   </div>
 
   <button onclick="sendRequest()">🚀 근무표 생성 요청하기</button>
 
   <script>
+    // 상태 저장 변수들
     let vacationsMap = {};
+    let durationsMap = {}; // 예: { "0": [1, 31], "1": [0, 0] } (0,0 은 off 의미)
+    let ratiosMap = {};    // 예: { "0": {D: 2, E: 1, N: 2} }
+    let daysInMonth = 31;
 
-    // 1. 페이지 로드 시 URL 파라미터(?t=ghp_...)에서 토큰 자동 추출 및 저장 로직
+    // 1. 페이지 로드 시 토큰 처리
     window.onload = function() {
       const urlParams = new URLSearchParams(window.location.search);
       const tokenFromUrl = urlParams.get('t');
 
-      // URL에 토큰이 전달되었으면 localStorage에 자동 저장
       if (tokenFromUrl) {
         localStorage.setItem('crew_scheduler_pat', tokenFromUrl.trim());
-        // 주소창에서 ?t=... 파라미터를 제거하여 토큰 노출 방지
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
@@ -101,26 +110,90 @@
 
       if (savedToken) {
         tokenInput.value = savedToken;
-        // 이미 저장된 토큰이 있으면 PAT 입력란을 숨기고 안내 문구 노출
         document.getElementById('tokenSection').classList.add('hidden');
         document.getElementById('authStatus').classList.remove('hidden');
       }
 
-      renderCalendar();
+      initMonth();
     };
 
-    // 2. 선택한 연도/월에 맞게 달력 일수(28/30/31일)를 자동으로 계산하여 그리기
+    // 연/월 변경 시 일수 계산하고 초기화
+    function initMonth() {
+      const year = parseInt(document.getElementById('year').value);
+      const month = parseInt(document.getElementById('month').value);
+      daysInMonth = new Date(year, month, 0).getDate();
+      
+      // 크루 정보 초기화(기본값 채우기)
+      for(let i = 0; i <= 9; i++) {
+        if (!vacationsMap[i]) vacationsMap[i] = [];
+        if (!durationsMap[i]) durationsMap[i] = [1, daysInMonth];
+        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
+      }
+      loadCrewData();
+    }
+
+    // 선택된 크루의 데이터를 화면에 불러오기
+    function loadCrewData() {
+      const emp = document.getElementById('crewSelect').value;
+      
+      // 기간 세팅
+      const duration = durationsMap[emp];
+      if (duration[0] === 0) { // Off 상태
+        document.getElementById('isOff').checked = true;
+        document.getElementById('startDay').disabled = true;
+        document.getElementById('endDay').disabled = true;
+        document.getElementById('startDay').value = '';
+        document.getElementById('endDay').value = '';
+      } else {
+        document.getElementById('isOff').checked = false;
+        document.getElementById('startDay').disabled = false;
+        document.getElementById('endDay').disabled = false;
+        document.getElementById('startDay').value = duration[0];
+        document.getElementById('endDay').value = duration[1];
+      }
+
+      // 비율 세팅
+      const ratio = ratiosMap[emp];
+      document.getElementById('ratioD').value = ratio.D;
+      document.getElementById('ratioE').value = ratio.E;
+      document.getElementById('ratioN').value = ratio.N;
+
+      renderCalendar();
+    }
+
+    // 사용자가 입력 칸을 수정할 때 메모리에 저장
+    function saveCrewData() {
+      const emp = document.getElementById('crewSelect').value;
+      const isOff = document.getElementById('isOff').checked;
+
+      if (isOff) {
+        durationsMap[emp] = [0, 0]; // 백엔드에 off로 전달할 약속 기호
+      } else {
+        let sd = parseInt(document.getElementById('startDay').value) || 1;
+        let ed = parseInt(document.getElementById('endDay').value) || daysInMonth;
+        durationsMap[emp] = [sd, ed];
+      }
+
+      ratiosMap[emp] = {
+        D: parseInt(document.getElementById('ratioD').value) || 0,
+        E: parseInt(document.getElementById('ratioE').value) || 0,
+        N: parseInt(document.getElementById('ratioN').value) || 0
+      };
+    }
+
+    // 투입 안함(Off) 체크박스 동작
+    function toggleOff() {
+      const isOff = document.getElementById('isOff').checked;
+      document.getElementById('startDay').disabled = isOff;
+      document.getElementById('endDay').disabled = isOff;
+      saveCrewData();
+    }
+
+    // 달력 그리기
     function renderCalendar() {
       const cal = document.getElementById('calendar');
       cal.innerHTML = '';
       const emp = document.getElementById('crewSelect').value;
-      if (!vacationsMap[emp]) vacationsMap[emp] = [];
-
-      const year = parseInt(document.getElementById('year').value);
-      const month = parseInt(document.getElementById('month').value);
-      
-      // 해당 월의 마지막 날짜 계산 (예: 2월은 28/29일, 4월은 30일 등)
-      const daysInMonth = new Date(year, month, 0).getDate();
 
       for (let day = 1; day <= daysInMonth; day++) {
         const btn = document.createElement('div');
@@ -138,65 +211,45 @@
       }
     }
 
-    // 3. API 요청 보내기
+    // API 요청
     async function sendRequest() {
       let token = document.getElementById('token').value.trim() || localStorage.getItem('crew_scheduler_pat');
-      
-      if (!token) {
-        return alert('❌ 접근 권한이 없습니다. 관리자에게 전달받은 전용 링크로 접속해주시거나 PAT를 입력해 주세요!');
-      }
+      if (!token) return alert('❌ PAT를 입력해 주세요!');
 
-      // 사용자가 수동으로 입력한 경우에도 브라우저에 자동 저장
       localStorage.setItem('crew_scheduler_pat', token);
 
-      // 백엔드로 보낼 데이터 정리
+      // 1. 휴가 리스트 정제
       let vacationList = [];
       for (let emp in vacationsMap) {
-        vacationsMap[emp].forEach(day => {
-          vacationList.push([parseInt(emp), day]);
-        });
+        vacationsMap[emp].forEach(day => vacationList.push([parseInt(emp), day]));
       }
 
+      // Payload(백엔드로 보낼 화물) 구성
       const payload = {
         event_type: 'generate_schedule',
         client_payload: {
           year: parseInt(document.getElementById('year').value),
           month: parseInt(document.getElementById('month').value),
-          vacations: vacationList
+          vacations: vacationList,
+          durations: durationsMap,  // 새롭게 추가됨
+          ratios: ratiosMap         // 새롭게 추가됨
         }
       };
 
       try {
         const res = await fetch('https://api.github.com/repos/ibottledo/CrewScheduler/dispatches', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/vnd.github.v3+json'
-          },
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' },
           body: JSON.stringify(payload)
         });
 
         if (res.ok) {
           alert('✅ Actions 연산이 시작되었습니다!\nActions 탭에서 결과를 확인하세요.');
         } else {
-          const errorData = await res.json().catch(() => ({}));
-          console.error('API Error:', res.status, errorData);
-          
-          if (res.status === 404) {
-            alert(`❌ [404 에러] 저장소를 찾을 수 없습니다.\n1. 저장소 이름(CrewScheduler)이나 ID(ibottledo) 오타 확인\n2. Private 저장소인데 토큰에 repo 권한이 없는지 확인`);
-          } else if (res.status === 401) {
-            alert('❌ [401 에러] PAT 토큰이 올바르지 않거나 만료되었습니다.');
-          } else if (res.status === 403) {
-            alert('❌ [403 에러] 토큰에 repo 권한이 없습니다. GitHub에서 repo 권한을 체크한 Classic 토큰을 발급받아 주세요.');
-          } else if (res.status === 422) {
-            alert('❌ [422 에러] event_type 이름이 workflow와 일치하지 않습니다.');
-          } else {
-            alert(`❌ 요청 실패 (상태 코드: ${res.status})\n${errorData.message || ''}`);
-          }
+          alert(`❌ 요청 실패 (상태 코드: ${res.status})\n권한을 확인하세요.`);
         }
       } catch (err) {
         alert('❌ 네트워크 오류가 발생했습니다.');
-        console.error(err);
       }
     }
   </script>

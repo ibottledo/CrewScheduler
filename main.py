@@ -134,25 +134,48 @@ def main():
 
     # A. 웹페이지 달력(GitHub Pages)에서 버튼을 눌러 실행된 경우
     if payload_raw and payload_raw.strip() not in ('', '{}'):
-        print("--- 🌐 웹(Payload) 요청 감지: 웹 달력 입력값으로 설정 업데이트 ---")
+        print("--- 🌐 웹(Payload) 요청 감지: 웹 UI 입력값으로 설정 업데이트 ---")
         try:
             payload = json.loads(payload_raw)
             
-            # 연/월 적용
+            # 1. 연/월 적용
             if 'year' in payload and 'month' in payload:
                 year = int(payload['year'])
                 month = int(payload['month'])
                 config['num_days'] = calendar.monthrange(year, month)[1]
             
-            # 웹에서 선택한 휴가일 적용 (웹은 [크루번호, 날짜(1~31)] 형태이므로 0-indexed 처리)
+            # 2. 웹에서 선택한 휴가일 적용
             if 'vacations' in payload:
                 new_vacations = []
                 for emp, day in payload['vacations']:
-                    new_vacations.append([int(emp), int(day) - 1])
+                    new_vacations.append([int(emp), int(day) - 1]) # 파이썬은 0-indexed 이므로 -1
                 config['vacations'] = new_vacations
                 print(f"달력 휴가 정보 업데이트 완료: {len(new_vacations)}건")
                 
-            # 웹 UI에는 아직 없지만, 향후 기간/비율 추가 시 대비하여 기존 config값(config.json)을 그대로 사용하도록 냅둠.
+            # 3. 투입 기간(durations) 업데이트 추가
+            if 'durations' in payload:
+                # payload['durations'] 형태: {"0": [1, 31], "1": [0, 0]} (0,0 은 off)
+                for emp_str, period in payload['durations'].items():
+                    emp_int = int(emp_str)
+                    start_day, end_day = period
+                    
+                    if start_day == 0:  # 투입 안 함 (Off) 체크된 경우
+                        config['crew_periods'][str(emp_int)] = [-1, -2]
+                    else:
+                        # 0-indexed로 맞춰서 config 덮어쓰기
+                        config['crew_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
+                print(f"크루 투입 기간(Durations) 업데이트 완료")
+
+            # 4. 근무 비율(ratios) 업데이트 추가
+            if 'ratios' in payload:
+                # payload['ratios'] 형태: {"0": {"D": 2, "E": 1, "N": 2}}
+                for emp_str, ratio_dict in payload['ratios'].items():
+                    config['shift_ratios'][str(emp_str)] = {
+                        'D': int(ratio_dict['D']),
+                        'E': int(ratio_dict['E']),
+                        'N': int(ratio_dict['N'])
+                    }
+                print(f"크루 근무 비율(Ratios) 업데이트 완료")
             
         except json.JSONDecodeError:
             print("경고: Payload 형식이 올바른 JSON이 아닙니다.")
