@@ -65,7 +65,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddImplication(work[(e, d, 'E')], work[(e, d + 1, 'D')].Not())
             model.AddImplication(work[(e, d, 'D')], work[(e, d + 1, 'N')].Not())
 
-    # 최대 3일 연속 휴무 (더 간단하고 강력한 로직으로 복귀)
+    # 최대 3일 연속 휴무
     for e in all_employees:
         for d in range(num_days - 3): 
             worked_in_window = sum(work[(e, d + i, s)] for i in range(4) for s in shifts)
@@ -84,12 +84,11 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             for d in range(num_days - 3):
                 model.Add(sum(work[(e, d + i, s)] for i in range(4)) <= 3)
 
-    # [신규 하드 제약 조건] 직원당 월별 'N N' 시퀀스 최대 1회
+    # [하드 제약 조건] 직원당 월별 'N N' 시퀀스 최대 1회
     for e in all_employees:
         n_to_n_vars_for_employee = []
         for d in range(num_days - 1):
             n_to_n_d = model.NewBoolVar(f'n_to_n_hard_{e}_{d}')
-            # n_to_n_d는 work[(e, d, 'N')]과 work[(e, d + 1, 'N')]이 모두 참일 때만 참
             model.Add(n_to_n_d == 1).OnlyEnforceIf([work[(e, d, 'N')], work[(e, d + 1, 'N')]])
             model.Add(n_to_n_d == 0).OnlyEnforceIf(work[(e, d, 'N')].Not())
             model.Add(n_to_n_d == 0).OnlyEnforceIf(work[(e, d + 1, 'N')].Not())
@@ -99,35 +98,36 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     # --- [4] 소프트 제약 조건 (페널티) ---
     penalties = []
     over_vars = []
-    all_non_crew_period_scaled_rates = []
+    daily_avg_scaled_rates = []  # 순수 일반 근무일 기준 '하루 평균 근무시간' 스케일링 변수
     
-    # 나중 분석을 위해 예상 근무 시간 저장
     expected_hours_analysis = {}
 
     for e in all_employees:
         start_d, end_d = crew_periods[e]
         is_crew_member = (end_d >= start_d)
 
-        # --- 'non-crew period' 근무 시간 비율 계산 (모든 직원에 대해) ---
-        non_crew_days = [d for d in all_days if not (start_d <= d <= end_d)]
-        num_non_crew_days = len(non_crew_days)
+        # -------------------------------------------------------------------
+        # 🎯 [수정 및 핵심 반영] 크루도 아니고 휴가도 아닌 '순수 일반 근무 가능일' 계산
+        # -------------------------------------------------------------------
+        normal_days = [
+            d for d in all_days 
+            if not (start_d <= d <= end_d) and ((e, d) not in vacations)
+        ]
+        num_normal_days = len(normal_days)
         
-        if num_non_crew_days > 0:
-            non_crew_period_hours = model.NewIntVar(0, 500, f'non_crew_period_hours_e{e}')
-            model.Add(non_crew_period_hours == sum(work[(e, d, s)] * shift_hours[s] 
-                                                   for d in non_crew_days
-                                                   for s in shifts))
+        if num_normal_days > 0:
+            normal_hours = model.NewIntVar(0, 500, f'normal_hours_e{e}')
+            model.Add(normal_hours == sum(work[(e, d, s)] * shift_hours[s] 
+                                          for d in normal_days
+                                          for s in shifts))
             
-            # 시간 비율을 직접 비교하기 위한 변수 (정수 연산을 위해 100배 스케일링)
-            # scaled_rate = (hours / days) * 100
-            # hours * 100 = scaled_rate * days
-            scaled_rate = model.NewIntVar(0, 24 * 100, f'scaled_rate_e{e}')
-            model.Add(non_crew_period_hours * 100 == scaled_rate * num_non_crew_days)
-            all_non_crew_period_scaled_rates.append(scaled_rate)
+            # 정수 연산을 위한 100배 스케일링: (일반 총 근무시간 / 일반 근무 가능일수) * 100
+            daily_avg_rate = model.NewIntVar(0, 24 * 100, f'daily_avg_rate_e{e}')
+            model.Add(normal_hours * 100 == daily_avg_rate * num_normal_days)
+            daily_avg_scaled_rates.append(daily_avg_rate)
 
         # --- Crew 멤버에 대한 페널티 ---
         if is_crew_member:
-            # [신규] 주간 평균 40시간 초과에 대한 페널티
             total_hours = sum(work[(e, d, s)] * shift_hours[s] for d in all_days for s in shifts)
             num_vacation_days = sum(1 for d in all_days if (e, d) in vacations)
             effective_days = num_days - num_vacation_days
@@ -140,7 +140,6 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
                 penalties.append(over_40h_avg_penalty)
 
-            # 인력 수준에 대한 기존 페널티
             my_crew_days = max(0, end_d - start_d + 1)
             my_expected_hours = 0
             if my_crew_days > 0:
@@ -156,7 +155,6 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                                      for d in range(start_d, end_d + 1) if 0 <= d < num_days
                                      for s in shifts)
                 
-                # [신규 하드 제약 조건] Crew 멤버는 예상 근무 시간을 충족해야 함
                 model.Add(crew_hours >= my_expected_hours)
 
                 over = model.NewIntVar(0, 500, f'over_e{e}')
@@ -166,14 +164,10 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 model.AddMultiplicationEquality(over_penalty, over, PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']])
                 penalties.append(over_penalty)
                 over_vars.append(over)
-        
-        # --- 비-Crew 멤버에 대한 페널티 ---
         else:
-            # 전체 월이 비-크루인 멤버
             expected_hours_analysis[e] = 0
 
-    # --- 모든 직원에 대한 페널티 ---
-    # 근무 비율 페널티
+    # --- 모든 직원에 대한 근무 비율 페널티 ---
     for e in all_employees:
         w_D = sum(work[(e, d, 'D')] for d in all_days)
         w_E = sum(work[(e, d, 'E')] for d in all_days)
@@ -208,7 +202,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddMultiplicationEquality(ratio_penalty, ratio_penalty_var, PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']])
             penalties.append(ratio_penalty)
 
-    # 연속 N 근무에 대한 페널티 (소프트 제약 조건)
+    # 연속 N 근무에 대한 페널티
     for e in all_employees:
         for d in range(num_days - 1):
             n_to_n = model.NewBoolVar(f'n_to_n_soft_{e}_{d}')
@@ -226,29 +220,26 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         model.AddMultiplicationEquality(max_over_penalty, max_over, PENALTY_PRIORITY_MAP[penalties_config['max_over_staffing_priority']])
         penalties.append(max_over_penalty)
         
-    # [MODIFIED] 비-Crew 기간 근무의 공정성에 대한 페널티
-    if all_non_crew_period_scaled_rates:
-        max_rate = model.NewIntVar(0, 24 * 100, 'max_non_crew_period_rate')
-        min_rate = model.NewIntVar(0, 24 * 100, 'min_non_crew_period_rate')
+    # -------------------------------------------------------------------
+    # 🎯 [수정 및 핵심 반영] 일반 근무 기간 하루 평균 근무시간 균등성(Max - Min) 페널티
+    # -------------------------------------------------------------------
+    if daily_avg_scaled_rates:
+        max_daily_rate = model.NewIntVar(0, 24 * 100, 'max_daily_avg_rate')
+        min_daily_rate = model.NewIntVar(0, 24 * 100, 'min_daily_avg_rate')
         
-        model.AddMaxEquality(max_rate, all_non_crew_period_scaled_rates)
-        model.AddMinEquality(min_rate, all_non_crew_period_scaled_rates)
+        model.AddMaxEquality(max_daily_rate, daily_avg_scaled_rates)
+        model.AddMinEquality(min_daily_rate, daily_avg_scaled_rates)
         
-        fairness_rate_var = model.NewIntVar(0, 24 * 100, 'fairness_non_crew_period_rate_var')
-        model.Add(fairness_rate_var == max_rate - min_rate)
+        daily_fairness_var = model.NewIntVar(0, 24 * 100, 'daily_fairness_rate_var')
+        model.Add(daily_fairness_var == max_daily_rate - min_daily_rate)
         
-        fairness_rate_penalty = model.NewIntVar(0, (24 * 100) * 1000, 'fairness_non_crew_period_rate_penalty')
-        model.AddMultiplicationEquality(fairness_rate_penalty, fairness_rate_var, PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']])
-        penalties.append(fairness_rate_penalty)
-        
-        # 또한 비-Crew 기간 근무의 총량을 최소화하기 위해 페널티 부과 (이전 로직과 유사하게 유지)
-        # 총 비율의 합을 최소화하는 것은 의미가 없으므로, 총 시간의 합을 최소화하는 것이 더 적절할 수 있음
-        # 하지만 이 로직은 이미 all_non_crew_period_hours 변수들을 통해 암시적으로 처리될 수 있으므로,
-        # 여기서는 공정성 페널티에 집중하고 총량 페널티는 제거하거나 다르게 접근해야 함.
-        # 여기서는 설명을 위해 일단 비워둠. 필요 시 총 시간 합계에 대한 페널티를 다시 추가할 수 있음.
-        pass
+        daily_fairness_penalty = model.NewIntVar(0, (24 * 100) * 1000, 'daily_fairness_rate_penalty')
+        model.AddMultiplicationEquality(daily_fairness_penalty, daily_fairness_var, PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']])
+        penalties.append(daily_fairness_penalty)
 
-    # --- [5] 문제 해결 및 결과 반환 ---
+    # --- [5] 목적 함수(Objective) 설정 및 문제 해결 ---
+    model.Minimize(sum(penalties))
+
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = config.get('solver_time_limit', 45.0)
     status = solver.Solve(model)
