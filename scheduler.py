@@ -284,6 +284,30 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     status_str = solver.StatusName(status)
     objective_value = solver.ObjectiveValue() if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else -1
 
+        # --- 전환 다양성 페널티 (같은 근무 연속 억제) ---
+    transition_priority = PENALTY_PRIORITY_MAP.get(
+        penalties_config.get('shift_transition_diversity_priority', 'medium'),
+        10
+    )
+
+    for e in all_employees:
+        for d in range(num_days - 1):
+            same_shift_flags = []
+            for s in shifts:  # D/E/N
+                b = model.NewBoolVar(f'same_shift_e{e}_d{d}_{s}')
+                # b == 1 <=> (d일 s근무) AND (d+1일 s근무)
+                model.AddBoolAnd([work[(e, d, s)], work[(e, d + 1, s)]]).OnlyEnforceIf(b)
+                model.AddBoolOr([work[(e, d, s)].Not(), work[(e, d + 1, s)].Not()]).OnlyEnforceIf(b.Not())
+                same_shift_flags.append(b)
+
+            same_shift_any = model.NewBoolVar(f'same_shift_any_e{e}_d{d}')
+            model.AddMaxEquality(same_shift_any, same_shift_flags)
+
+            # same_shift_any가 1이면 transition_priority만큼 페널티
+            same_shift_penalty = model.NewIntVar(0, transition_priority, f'same_shift_penalty_e{e}_d{d}')
+            model.AddMultiplicationEquality(same_shift_penalty, [same_shift_any, transition_priority])
+            penalties.append(same_shift_penalty)
+
     import json
 
     # 스케줄 생성 성공 시 JSON 파일로 결과 저장
