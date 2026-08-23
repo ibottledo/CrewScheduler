@@ -117,6 +117,20 @@ def calculate_total_penalty(config, solution):
         min_nc = min(current_non_crew_hours)
         total_calculated_penalty += (max_nc - min_nc) * PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
         total_calculated_penalty += sum(current_non_crew_hours) * PENALTY_PRIORITY_MAP[penalties_config['non_crew_work_priority']]
+        
+        # --- 전환 다양성 페널티 (같은 근무 연속 억제) ---
+    transition_priority = PENALTY_PRIORITY_MAP.get(
+        penalties_config.get('shift_transition_diversity_priority', 'medium'),
+        10
+    )
+
+    for e in all_employees:
+        for d in range(num_days - 1):
+            cur = get_shift(e, d)
+            nxt = get_shift(e, d + 1)
+            # 연속한 두 날 모두 근무이고, 같은 근무 타입이면 페널티
+            if cur != 'off' and nxt != 'off' and cur == nxt:
+                total_calculated_penalty += transition_priority
     
     return total_calculated_penalty
 
