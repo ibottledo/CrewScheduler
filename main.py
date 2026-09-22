@@ -179,6 +179,23 @@ def main():
                     'E': int(ratio_dict['E']),
                     'N': int(ratio_dict['N'])
                 }
+
+        # E. 엑셀식 고정 입력: D/E/N은 고정 근무, OFF/휴가는 고정 휴무
+        if 'fixed_shifts' in payload:
+            fixed_shifts = {}
+            fixed_vacations = set(tuple(vacation) for vacation in config.get('vacations', []))
+            for emp_str, employee_shifts in payload['fixed_shifts'].items():
+                fixed_shifts[str(int(emp_str))] = {}
+                for day, shift in employee_shifts.items():
+                    normalized_shift = str(shift).strip().upper()
+                    if normalized_shift in ('D', 'E', 'N', 'OFF', '휴가'):
+                        employee = int(emp_str)
+                        day_index = int(day)
+                        fixed_shifts[str(employee)][str(day_index)] = normalized_shift
+                        if normalized_shift in ('OFF', '휴가'):
+                            fixed_vacations.add((employee, day_index))
+            config['fixed_shifts'] = fixed_shifts
+            config['vacations'] = [list(vacation) for vacation in sorted(fixed_vacations)]
     else:
         print("--- 💻 로컬/기본 환경 감지: config.json 원본 설정으로 실행합니다 ---")
 
@@ -205,7 +222,7 @@ def main():
             
         print_schedule(config, solution, expected_hours)
 
-        # 4. 🚀 [핵심] 웹 UI 표시를 위한 JSON 결과 파일 저장
+        # 4. [핵심] 웹 UI 표시를 위한 JSON 결과 파일 저장
         output_data = {
             "status": status,
             "schedule": {},

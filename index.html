@@ -15,9 +15,6 @@
     button:active { background: #2c5282; }
     .btn-green { background: #38a169; }
     .btn-green:active { background: #2f855a; }
-    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 8px; }
-    .day-btn { padding: 8px 2px; text-align: center; border: 1px solid #e2e8f0; background: white; border-radius: 4px; font-size: 12px; cursor: pointer; }
-    .day-btn.selected { background: #e53e3e; color: white; border-color: #c53030; font-weight: bold; }
     
     .hidden { display: none !important; }
     .status-badge { font-size: 12px; color: #2b6cb0; font-weight: bold; margin-bottom: 8px; }
@@ -89,10 +86,12 @@
       N: <input type="number" id="ratioN" class="number-input" onchange="saveCrewData()">
     </div>
 
-    <div class="divider"></div>
+  </div>
 
-    <label>휴가 날짜 선택</label>
-    <div id="calendar" class="calendar-grid"></div>
+  <div class="card">
+    <label style="color: #2b6cb0; font-size: 16px;">사전 고정 근무표</label>
+    <p style="color: #718096; font-size: 12px;">셀을 클릭해 빈칸, D, E, N, OFF를 선택하세요. 입력한 값은 솔버가 변경하지 않습니다.</p>
+    <div id="fixedShiftGrid" style="overflow-x: auto;"></div>
   </div>
 
   <!-- 액션 버튼 -->
@@ -109,9 +108,9 @@
 
   <script>
     // 상태 저장 변수들
-    let vacationsMap = {};
     let durationsMap = {}; 
     let ratiosMap = {};    
+    let fixedShiftsMap = {};
     let daysInMonth = 31;
 
     window.onload = function() {
@@ -143,11 +142,12 @@
       daysInMonth = new Date(year, month, 0).getDate();
       
       for(let i = 0; i <= 9; i++) {
-        if (!vacationsMap[i]) vacationsMap[i] = [];
         if (!durationsMap[i]) durationsMap[i] = [0, 0];
         if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
+        if (!fixedShiftsMap[i]) fixedShiftsMap[i] = {};
       }
       loadCrewData();
+      renderFixedShiftGrid();
     }
 
     function loadCrewData() {
@@ -162,7 +162,6 @@
       document.getElementById('ratioE').value = ratio.E;
       document.getElementById('ratioN').value = ratio.N;
 
-      renderCalendar();
     }
 
     function saveCrewData() {
@@ -179,27 +178,6 @@
       };
     }
 
-    function renderCalendar() {
-      const cal = document.getElementById('calendar');
-      cal.innerHTML = '';
-      const emp = document.getElementById('crewSelect').value;
-
-      for (let day = 1; day <= daysInMonth; day++) {
-        const btn = document.createElement('div');
-        btn.className = 'day-btn' + (vacationsMap[emp].includes(day) ? ' selected' : '');
-        btn.innerText = day + '일';
-        btn.onclick = () => {
-          if (vacationsMap[emp].includes(day)) {
-            vacationsMap[emp] = vacationsMap[emp].filter(d => d !== day);
-          } else {
-            vacationsMap[emp].push(day);
-          }
-          renderCalendar();
-        };
-        cal.appendChild(btn);
-      }
-    }
-
     // 근무표 생성 요청 (GitHub Actions 트리거)
     async function sendRequest() {
       let token = document.getElementById('token').value.trim() || localStorage.getItem('crew_scheduler_pat');
@@ -207,19 +185,14 @@
 
       localStorage.setItem('crew_scheduler_pat', token);
 
-      let vacationList = [];
-      for (let emp in vacationsMap) {
-        vacationsMap[emp].forEach(day => vacationList.push([parseInt(emp), day]));
-      }
-
       const payload = {
         event_type: 'generate_schedule',
         client_payload: {
           year: parseInt(document.getElementById('year').value),
           month: parseInt(document.getElementById('month').value),
-          vacations: vacationList,
           durations: durationsMap,
-          ratios: ratiosMap
+          ratios: ratiosMap,
+          fixed_shifts: fixedShiftsMap
         }
       };
 
@@ -238,6 +211,34 @@
       } catch (err) {
         alert('❌ 네트워크 오류가 발생했습니다.');
       }
+    }
+
+    function renderFixedShiftGrid() {
+      const container = document.getElementById('fixedShiftGrid');
+      let html = '<table class="result-table"><tr><th>직원</th>';
+      for (let day = 1; day <= daysInMonth; day++) html += `<th>${day}</th>`;
+      html += '</tr>';
+
+      for (let employee = 0; employee < 10; employee++) {
+        html += `<tr><th>${employee}</th>`;
+        for (let day = 0; day < daysInMonth; day++) {
+          const value = fixedShiftsMap[employee][day] || '';
+          const display = value === 'OFF' ? '휴' : value;
+          const cellClass = value === 'D' ? 'shift-D' : value === 'E' ? 'shift-E' : value === 'N' ? 'shift-N' : value === 'OFF' ? 'shift-off' : '';
+          html += `<td class="${cellClass}" style="cursor:pointer; min-width:28px" onclick="cycleFixedShift(${employee}, ${day})">${display}</td>`;
+        }
+        html += '</tr>';
+      }
+      container.innerHTML = html + '</table>';
+    }
+
+    function cycleFixedShift(employee, day) {
+      const values = ['', 'D', 'E', 'N', 'OFF'];
+      const current = fixedShiftsMap[employee][day] || '';
+      const next = values[(values.indexOf(current) + 1) % values.length];
+      if (next) fixedShiftsMap[employee][day] = next;
+      else delete fixedShiftsMap[employee][day];
+      renderFixedShiftGrid();
     }
 
     // 근무표 JSON 결과 가져오기 및 렌더링

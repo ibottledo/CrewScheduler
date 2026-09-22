@@ -29,6 +29,10 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     crew_periods = {int(k): tuple(v) for k, v in config['crew_periods'].items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
+    fixed_shifts = {
+        int(employee): {int(day): shift for day, shift in shifts_by_day.items()}
+        for employee, shifts_by_day in config.get('fixed_shifts', {}).items()
+    }
     
     penalties_config = config['penalties']
 
@@ -45,6 +49,22 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         if 0 <= d < num_days:
             for s in shifts:
                 model.Add(work[(e, d, s)] == 0)
+
+    # 사용자가 미리 입력한 근무와 휴가는 솔버가 변경하지 못하도록 고정
+    for e, shifts_by_day in fixed_shifts.items():
+        if e not in all_employees:
+            continue
+        for d, shift in shifts_by_day.items():
+            if not (0 <= d < num_days):
+                continue
+            if shift in shifts:
+                model.Add(work[(e, d, shift)] == 1)
+                for other_shift in shifts:
+                    if other_shift != shift:
+                        model.Add(work[(e, d, other_shift)] == 0)
+            elif shift in ('OFF', '휴가'):
+                for work_shift in shifts:
+                    model.Add(work[(e, d, work_shift)] == 0)
 
     # 각 직원은 하루에 최대 하나의 근무만 가짐
     for e in all_employees:
