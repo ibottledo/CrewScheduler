@@ -289,7 +289,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     model.Minimize(sum(penalties))
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = config.get('solver_time_limit', 45.0)
+    solver.parameters.max_time_in_seconds = config.get('solver_time_limit', 300)
     status = solver.Solve(model)
 
     # --- [6] 솔루션 처리 및 반환 ---
