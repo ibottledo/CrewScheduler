@@ -306,10 +306,12 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         penalties.append(daily_fairness_var * absolute_fairness_weight)
 
     # --- [5] 목적 함수(Objective) 설정 및 문제 해결 ---
-    model.Minimize(sum(penalties))
+    if config.get('optimize_schedule', True):
+        model.Minimize(sum(penalties))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = config.get('solver_time_limit', 1000)
+    solver.parameters.num_search_workers = config.get('solver_workers', 8)
     status = solver.Solve(model)
 
     # --- [6] 솔루션 처리 및 반환 ---
