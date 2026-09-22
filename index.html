@@ -28,7 +28,8 @@
     .shift-D { background-color: #feb2b2; font-weight: bold; color: #742a2a; } /* Day: 빨강 */
     .shift-E { background-color: #9ae6b4; font-weight: bold; color: #22543d; } /* Evening: 초록 */
     .shift-N { background-color: #90cdf4; font-weight: bold; color: #2a4365; } /* Night: 파랑 */
-    .shift-off { background-color: #ffffff; color: #a0aec0; } /* 휴무: 회색 - */
+    .shift-off { background-color: #ffffff; color: #a0aec0; } /* 일반 휴무 */
+    .shift-vacation { background-color: #fbd38d; color: #744210; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -90,7 +91,7 @@
 
   <div class="card">
     <label style="color: #2b6cb0; font-size: 16px;">사전 고정 근무표</label>
-    <p style="color: #718096; font-size: 12px;">셀을 클릭해 빈칸, D, E, N, OFF를 선택하세요. 입력한 값은 솔버가 변경하지 않습니다.</p>
+    <p style="color: #718096; font-size: 12px;">셀을 클릭해 빈칸, D, E, N, OFF, 휴가를 선택하세요. OFF는 평균에 포함되고 휴가는 제외됩니다.</p>
     <div id="fixedShiftGrid" style="overflow-x: auto;"></div>
   </div>
 
@@ -223,8 +224,8 @@
         html += `<tr><th>${employee}</th>`;
         for (let day = 0; day < daysInMonth; day++) {
           const value = fixedShiftsMap[employee][day] || '';
-          const display = value === 'OFF' ? '휴' : value;
-          const cellClass = value === 'D' ? 'shift-D' : value === 'E' ? 'shift-E' : value === 'N' ? 'shift-N' : value === 'OFF' ? 'shift-off' : '';
+          const display = value;
+          const cellClass = value === 'D' ? 'shift-D' : value === 'E' ? 'shift-E' : value === 'N' ? 'shift-N' : value === 'OFF' ? 'shift-off' : value === '휴가' ? 'shift-vacation' : '';
           html += `<td class="${cellClass}" style="cursor:pointer; min-width:28px" onclick="cycleFixedShift(${employee}, ${day})">${display}</td>`;
         }
         html += '</tr>';
@@ -233,7 +234,7 @@
     }
 
     function cycleFixedShift(employee, day) {
-      const values = ['', 'D', 'E', 'N', 'OFF'];
+      const values = ['', 'D', 'E', 'N', 'OFF', '휴가'];
       const current = fixedShiftsMap[employee][day] || '';
       const next = values[(values.indexOf(current) + 1) % values.length];
       if (next) fixedShiftsMap[employee][day] = next;

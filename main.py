@@ -180,7 +180,7 @@ def main():
                     'N': int(ratio_dict['N'])
                 }
 
-        # E. 엑셀식 고정 입력: D/E/N은 고정 근무, OFF/휴가는 고정 휴무
+        # E. 엑셀식 고정 입력: OFF는 일반 휴무, 휴가만 평균 계산에서 제외
         if 'fixed_shifts' in payload:
             fixed_shifts = {}
             fixed_vacations = set(tuple(vacation) for vacation in config.get('vacations', []))
@@ -192,7 +192,7 @@ def main():
                         employee = int(emp_str)
                         day_index = int(day)
                         fixed_shifts[str(employee)][str(day_index)] = normalized_shift
-                        if normalized_shift in ('OFF', '휴가'):
+                        if normalized_shift == '휴가':
                             fixed_vacations.add((employee, day_index))
             config['fixed_shifts'] = fixed_shifts
             config['vacations'] = [list(vacation) for vacation in sorted(fixed_vacations)]
