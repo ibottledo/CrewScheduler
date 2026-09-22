@@ -41,5 +41,5 @@
         "fairness_of_non_crew_work_priority": "highest",
         "shift_transition_diversity_priority": "medium"
     },
-    "solver_time_limit": 45.0
+    "solver_time_limit": 1000.0
 }

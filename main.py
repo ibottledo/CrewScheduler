@@ -201,6 +201,7 @@ def main():
 
     print("--- 설정 로드 완료 ---")
     print(f"{config.get('num_employees', 10)}명의 직원을 대상으로 {config.get('num_days', 31)}일간의 스케줄링을 진행합니다.")
+    print(f"솔버 제한 시간: {config.get('solver_time_limit', 1000)}초")
     print("--- 솔버 시작 ---")
 
     # 3. 솔버 실행
