@@ -259,7 +259,10 @@
         
         const data = await response.json();
         
-        if (data.status !== 'OPTIMAL' && data.status !== 'FEASIBLE') {
+          if (data.status === 'INPUT_CONFLICT') {
+            throw new Error(`고정 입력 충돌:\n${data.errors.join('\n')}`);
+          }
+          if (data.status !== 'OPTIMAL' && data.status !== 'FEASIBLE') {
            throw new Error(`스케줄 생성에 실패했습니다. (상태: ${data.status})\n제약 조건(휴가 등)이 너무 빡빡한지 확인해주세요.`);
         }
 

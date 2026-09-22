@@ -134,6 +134,49 @@ def calculate_total_penalty(config, solution):
     
     return total_calculated_penalty
 
+
+def find_fixed_input_conflicts(config):
+    """고정 입력만으로 즉시 판별할 수 있는 충돌을 찾습니다."""
+    conflicts = []
+    fixed_shifts = {
+        int(employee): {int(day): shift for day, shift in shifts_by_day.items()}
+        for employee, shifts_by_day in config.get('fixed_shifts', {}).items()
+    }
+    vacations = {tuple(vacation) for vacation in config.get('vacations', [])}
+    groups = [config['groups']['a'], config['groups']['b']]
+    required_by_group = [('D', groups), ('N', groups)]
+
+    for employee, shifts_by_day in fixed_shifts.items():
+        for day, shift in shifts_by_day.items():
+            if (employee, day) in vacations and shift in ('D', 'E', 'N'):
+                conflicts.append(f"직원 {employee}번 {day + 1}일: 휴가와 {shift} 근무가 동시에 입력되었습니다.")
+
+        for day in range(1, config['num_days']):
+            previous_shift = shifts_by_day.get(day - 1)
+            current_shift = shifts_by_day.get(day)
+            if previous_shift == 'E' and current_shift == 'D':
+                conflicts.append(f"직원 {employee}번: {day}일과 {day + 1}일 사이 E->D 연속 근무가 금지됩니다.")
+            if previous_shift == 'D' and current_shift == 'N':
+                conflicts.append(f"직원 {employee}번: {day}일과 {day + 1}일 사이 D->N 연속 근무가 금지됩니다.")
+
+        for shift in ('D', 'E', 'N'):
+            for start in range(config['num_days'] - 3):
+                if all(shifts_by_day.get(start + offset) == shift for offset in range(4)):
+                    conflicts.append(f"직원 {employee}번: {start + 1}일부터 {start + 4}일까지 {shift} 4일 연속은 금지됩니다.")
+
+    for day in range(config['num_days']):
+        for shift, group_list in required_by_group:
+            for group in group_list:
+                assigned = [employee for employee in group if fixed_shifts.get(employee, {}).get(day) == shift]
+                if len(assigned) > 1:
+                    conflicts.append(f"{day + 1}일 {shift}: 같은 그룹에 고정 근무자가 {len(assigned)}명입니다 ({assigned}).")
+
+        assigned_e = [employee for employee in range(config['num_employees']) if fixed_shifts.get(employee, {}).get(day) == 'E']
+        if len(assigned_e) > 1:
+            conflicts.append(f"{day + 1}일 E: 고정 근무자가 {len(assigned_e)}명입니다 ({assigned_e}).")
+
+    return conflicts
+
 def main():
     """
     Crew 스케줄링 프로세스를 실행하는 메인 함수.
@@ -202,6 +245,16 @@ def main():
     print("--- 설정 로드 완료 ---")
     print(f"{config.get('num_employees', 10)}명의 직원을 대상으로 {config.get('num_days', 31)}일간의 스케줄링을 진행합니다.")
     print(f"솔버 제한 시간: {config.get('solver_time_limit', 1000)}초")
+
+    conflicts = find_fixed_input_conflicts(config)
+    if conflicts:
+        print("--- 고정 입력 충돌: 솔버 실행을 중단합니다 ---")
+        for conflict in conflicts:
+            print(conflict)
+        with open('schedule_result.json', 'w', encoding='utf-8') as f:
+            json.dump({"status": "INPUT_CONFLICT", "errors": conflicts, "schedule": {}, "stats": {}}, f, ensure_ascii=False, indent=2)
+        return
+
     print("--- 솔버 시작 ---")
 
     # 3. 솔버 실행
