@@ -184,15 +184,24 @@ def main():
         }
         num_days = config['num_days']
         shift_hours_map = {s: config['shifts'][s]['hours'] for s in config['shifts']}
+        vacation_set = {
+            (int(employee), int(day))
+            for employee, day in config.get('vacations', [])
+            if 0 <= int(employee) < config.get('num_employees', 10) and 0 <= int(day) < num_days
+        }
         
         for e in range(config.get('num_employees', 10)):
-            # 근무표 저장 (휴무면 '-')
-            output_data["schedule"][e] = {d: (solution.get(e, {}).get(d) if solution.get(e, {}).get(d) != 'off' else '-') for d in range(num_days)}
+            # 휴가는 결과 자체에 V로 저장해 프론트가 별도 목록에 의존하지 않도록 합니다.
+            output_data["schedule"][e] = {
+                d: 'V' if (e, d) in vacation_set else (
+                    solution.get(e, {}).get(d) if solution.get(e, {}).get(d) != 'off' else '-'
+                )
+                for d in range(num_days)
+            }
             
             # 통계 계산
             total_hours = sum(shift_hours_map.get(solution.get(e, {}).get(d, 'off'), 0) for d in range(num_days))
-            vacation_days = sum(1 for d in range(num_days) if (e, d) in config['vacations'])
-            effective_days = num_days - vacation_days
+            effective_days = num_days - sum(1 for employee, day in vacation_set if employee == e)
             d_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'D')
             e_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'E')
             n_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'N')

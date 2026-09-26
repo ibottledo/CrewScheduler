@@ -296,7 +296,7 @@
           const isVacation = vacationSet.has(`${e}-${d}`);
           let shift = isVacation ? 'V' : data.schedule[e][d];
                 // 근무 타입에 따른 클래스 부여 (색상 적용)
-          let shiftClass = isVacation ? 'shift-vacation' : shift === 'D' ? 'shift-D' : shift === 'E' ? 'shift-E' : shift === 'N' ? 'shift-N' : 'shift-off';
+              let shiftClass = isVacation || shift === 'V' ? 'shift-vacation' : shift === 'D' ? 'shift-D' : shift === 'E' ? 'shift-E' : shift === 'N' ? 'shift-N' : 'shift-off';
                 html += `<td class="${shiftClass}">${shift}</td>`;
             }
             
