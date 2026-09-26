@@ -28,6 +28,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
 
     crew_break_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
+    full_month_crew = {int(k): bool(v) for k, v in config.get('full_month_crew', {}).items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
     fixed_shifts = {
@@ -112,7 +113,9 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         break_start, break_end = crew_break_periods.get(e, (-1, -2))
         has_break_period = 0 <= break_start <= break_end < num_days
         crew_cycles = []
-        if has_break_period:
+        if full_month_crew.get(e, False):
+            crew_cycles = [all_days]
+        elif has_break_period:
             first_cycle = list(range(0, break_start))
             second_cycle = list(range(break_end + 1, num_days))
             crew_cycles = [cycle for cycle in (first_cycle, second_cycle) if cycle]

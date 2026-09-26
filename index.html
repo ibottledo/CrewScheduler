@@ -91,7 +91,7 @@
 
   <div class="card">
     <label style="color: #2b6cb0; font-size: 16px;">사전 고정 근무표</label>
-    <p style="color: #718096; font-size: 12px;">셀을 클릭해 빈칸, D, E, N, OFF, 휴가를 선택하세요. OFF는 평균에 포함되고 휴가는 제외됩니다.</p>
+    <p style="color: #718096; font-size: 12px;">셀을 클릭해 빈칸, D, E, N, OFF, 휴가를 선택하세요. OFF는 평균에 포함되고 휴가는 제외됩니다. 전체 Crew는 직원 행의 체크박스로 선택합니다.</p>
     <div id="fixedShiftGrid" style="overflow-x: auto;"></div>
   </div>
 
@@ -110,6 +110,7 @@
   <script>
     // 상태 저장 변수들
     let durationsMap = {}; 
+    let fullMonthCrewMap = {};
     let ratiosMap = {};    
     let fixedShiftsMap = {};
     let daysInMonth = 31;
@@ -144,6 +145,7 @@
       
       for(let i = 0; i <= 9; i++) {
         if (!durationsMap[i]) durationsMap[i] = [0, 0];
+        if (fullMonthCrewMap[i] === undefined) fullMonthCrewMap[i] = false;
         if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
         if (!fixedShiftsMap[i]) fixedShiftsMap[i] = {};
       }
@@ -192,6 +194,7 @@
           year: parseInt(document.getElementById('year').value),
           month: parseInt(document.getElementById('month').value),
           durations: durationsMap,
+          full_month_crew: fullMonthCrewMap,
           ratios: ratiosMap,
           fixed_shifts: fixedShiftsMap
         }
@@ -216,12 +219,13 @@
 
     function renderFixedShiftGrid() {
       const container = document.getElementById('fixedShiftGrid');
-      let html = '<table class="result-table"><tr><th>직원</th>';
+      let html = '<table class="result-table"><tr><th>직원</th><th>전체 Crew</th>';
       for (let day = 1; day <= daysInMonth; day++) html += `<th>${day}</th>`;
       html += '</tr>';
 
       for (let employee = 0; employee < 10; employee++) {
-        html += `<tr><th>${employee}</th>`;
+        const checked = fullMonthCrewMap[employee] ? ' checked' : '';
+        html += `<tr><th>${employee}</th><td><input type="checkbox"${checked} onchange="toggleFullMonthCrew(${employee}, this.checked)"></td>`;
         for (let day = 0; day < daysInMonth; day++) {
           const value = fixedShiftsMap[employee][day] || '';
           const display = value;
@@ -231,6 +235,10 @@
         html += '</tr>';
       }
       container.innerHTML = html + '</table>';
+    }
+
+    function toggleFullMonthCrew(employee, enabled) {
+      fullMonthCrewMap[employee] = enabled;
     }
 
     function cycleFixedShift(employee, day) {

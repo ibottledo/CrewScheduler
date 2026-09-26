@@ -66,6 +66,7 @@ def main():
 
     # 2. 🌐 웹(GitHub Actions)에서 넘겨준 설정 파일(input.json) 읽기
     duration_conflicts = []
+    config.setdefault('full_month_crew', {})
     if os.path.exists('input.json'):
         print("--- 🌐 웹(Payload) 요청 감지: input.json 설정 업데이트 ---")
         with open('input.json', 'r', encoding='utf-8') as f:
@@ -84,10 +85,18 @@ def main():
                 new_vacations.append([int(emp), int(day) - 1]) # 0-indexed 변환
             config['vacations'] = new_vacations
             
-        # C. 크루 휴식 기간 적용
+        # C. 전체 기간 Crew 여부 적용
+        if 'full_month_crew' in payload:
+            for emp_str, enabled in payload['full_month_crew'].items():
+                config['full_month_crew'][str(int(emp_str))] = bool(enabled)
+
+        # D. 크루 휴식 기간 적용
         if 'durations' in payload:
             for emp_str, period in payload['durations'].items():
                 emp_int = int(emp_str)
+                if config['full_month_crew'].get(str(emp_int), False):
+                    config['crewX_periods'][str(emp_int)] = [-1, -2]
+                    continue
                 if not isinstance(period, (list, tuple)) or len(period) != 2:
                     duration_conflicts.append(f"직원 {emp_int}번: 휴식 기간은 시작일과 종료일 두 값이어야 합니다.")
                     continue
@@ -104,7 +113,7 @@ def main():
                 else:
                     config['crewX_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
 
-        # D. 근무 비율 적용
+        # E. 근무 비율 적용
         if 'ratios' in payload:
             for emp_str, ratio_dict in payload['ratios'].items():
                 config['shift_ratios'][str(emp_str)] = {
@@ -113,7 +122,7 @@ def main():
                     'N': int(ratio_dict['N'])
                 }
 
-        # E. 엑셀식 고정 입력: OFF는 일반 휴무, 휴가만 평균 계산에서 제외
+        # F. 엑셀식 고정 입력: OFF는 일반 휴무, 휴가만 평균 계산에서 제외
         if 'fixed_shifts' in payload:
             fixed_shifts = {}
             fixed_vacations = set(tuple(vacation) for vacation in config.get('vacations', []))
@@ -206,13 +215,16 @@ def print_schedule(config, solution, expected_hours):
     num_days = config['num_days']
     num_employees = config['num_employees']
     crewX_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
+    full_month_crew = {int(k): bool(v) for k, v in config.get('full_month_crew', {}).items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_hours = {s: config['shifts'][s]['hours'] for s in config['shifts']}
 
     print("\n--- Crew 휴식 기간 및 휴가 정보 ---")
     for e in range(num_employees):
         start_d, end_d = crewX_periods.get(e, (-1, -2))
-        if 0 <= start_d <= end_d < num_days:
+        if full_month_crew.get(e, False):
+            print(f"  직원 {e:2d} | 휴식 없음: 1일 - {num_days:2d}일 전체 Crew")
+        elif 0 <= start_d <= end_d < num_days:
             print(f"  직원 {e:2d} | 휴식: {start_d + 1:2d}일 - {end_d + 1:2d}일")
     
     my_vacations = {e: [] for e in range(num_employees)}
@@ -243,6 +255,7 @@ def print_schedule(config, solution, expected_hours):
         total_hours = 0
         crew_hours = 0
         start_d, end_d = crewX_periods.get(e, (-1, -2))
+        is_full_month_crew = full_month_crew.get(e, False)
 
         for d in range(num_days):
             shift = solution.get(e, {}).get(d)
@@ -250,7 +263,7 @@ def print_schedule(config, solution, expected_hours):
                 counts[shift] += 1
                 hours = shift_hours.get(shift, 0)
                 total_hours += hours
-                if 0 <= start_d <= end_d < num_days and (d < start_d or d > end_d):
+                if is_full_month_crew or (0 <= start_d <= end_d < num_days and (d < start_d or d > end_d)):
                     crew_hours += hours
         
         num_vacation_days = len(my_vacations.get(e, []))
