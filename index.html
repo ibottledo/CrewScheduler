@@ -246,7 +246,7 @@
     }
 
     function cycleFixedShift(employee, day) {
-      const values = ['', 'D', 'E', 'N', 'OFF', '휴가'];
+      const values = ['', '휴가', 'D', 'E', 'N', 'OFF'];
       const current = fixedShiftsMap[employee][day] || '';
       const next = values[(values.indexOf(current) + 1) % values.length];
       if (next) fixedShiftsMap[employee][day] = next;
