@@ -285,13 +285,18 @@
             html += `<th>${d + 1}</th>`;
         }
         html += `<th style="min-width: 60px;">평균(주)</th><th style="min-width: 70px;">비율(D:E:N)</th></tr>`;
+
+        const vacationSet = new Set(
+          (data.vacations || []).map(([employee, day]) => `${employee}-${day}`)
+        );
         
         for (let e in data.schedule) {
             html += `<tr><td><strong>직원 ${e}</strong></td>`;
             for(let d = 0; d < daysCount; d++) {
-                let shift = data.schedule[e][d];
+          const isVacation = vacationSet.has(`${e}-${d}`);
+          let shift = isVacation ? 'V' : data.schedule[e][d];
                 // 근무 타입에 따른 클래스 부여 (색상 적용)
-                let shiftClass = shift === 'D' ? 'shift-D' : shift === 'E' ? 'shift-E' : shift === 'N' ? 'shift-N' : 'shift-off';
+          let shiftClass = isVacation ? 'shift-vacation' : shift === 'D' ? 'shift-D' : shift === 'E' ? 'shift-E' : shift === 'N' ? 'shift-N' : 'shift-off';
                 html += `<td class="${shiftClass}">${shift}</td>`;
             }
             

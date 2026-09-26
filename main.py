@@ -178,6 +178,7 @@ def main():
         # 4. [핵심] 웹 UI 표시를 위한 JSON 결과 파일 저장
         output_data = {
             "status": status,
+            "vacations": config['vacations'],
             "schedule": {},
             "stats": {}
         }
