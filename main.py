@@ -77,20 +77,30 @@ def main():
             year = int(payload['year'])
             month = int(payload['month'])
             config['num_days'] = calendar.monthrange(year, month)[1]
+
+        # B. 솔버 제한 시간 적용 (초)
+        if 'solver_time_limit' in payload:
+            try:
+                solver_time_limit = float(payload['solver_time_limit'])
+                if solver_time_limit <= 0:
+                    raise ValueError
+                config['solver_time_limit'] = solver_time_limit
+            except (TypeError, ValueError):
+                duration_conflicts.append("솔버 제한 시간은 0보다 큰 숫자(초)여야 합니다.")
             
-        # B. 휴가일 적용
+        # C. 휴가일 적용
         if 'vacations' in payload:
             new_vacations = []
             for emp, day in payload['vacations']:
                 new_vacations.append([int(emp), int(day) - 1]) # 0-indexed 변환
             config['vacations'] = new_vacations
             
-        # C. 전체 기간 Crew 여부 적용
+        # D. 전체 기간 Crew 여부 적용
         if 'full_month_crew' in payload:
             for emp_str, enabled in payload['full_month_crew'].items():
                 config['full_month_crew'][str(int(emp_str))] = bool(enabled)
 
-        # D. 크루 휴식 기간 적용
+        # E. 크루 휴식 기간 적용
         if 'durations' in payload:
             for emp_str, period in payload['durations'].items():
                 emp_int = int(emp_str)
@@ -113,7 +123,7 @@ def main():
                 else:
                     config['crewX_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
 
-        # E. 근무 비율 적용
+        # F. 근무 비율 적용
         if 'ratios' in payload:
             for emp_str, ratio_dict in payload['ratios'].items():
                 config['shift_ratios'][str(emp_str)] = {
@@ -122,7 +132,7 @@ def main():
                     'N': int(ratio_dict['N'])
                 }
 
-        # F. 엑셀식 고정 입력: OFF는 일반 휴무, 휴가만 평균 계산에서 제외
+        # G. 엑셀식 고정 입력: OFF는 일반 휴무, 휴가만 평균 계산에서 제외
         if 'fixed_shifts' in payload:
             fixed_shifts = {}
             fixed_vacations = set(tuple(vacation) for vacation in config.get('vacations', []))
