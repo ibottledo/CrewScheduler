@@ -4,6 +4,8 @@ import calendar
 from scheduler import solve_monthly_crew_schedule, PENALTY_PRIORITY_MAP
 from validation import validate_schedule
 
+month_days = calendar.monthrange(year, month)[1]
+
 def calculate_total_penalty(config, solution):
     """
     주어진 스케줄의 총 페널티를 설정을 기반으로 직접 계산합니다.
@@ -19,7 +21,7 @@ def calculate_total_penalty(config, solution):
     shifts = list(config['shifts'].keys())
     shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
 
-    crew_periods = {int(k): tuple(v) for k, v in config['crew_periods'].items()}
+    crewX_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
     
@@ -31,7 +33,7 @@ def calculate_total_penalty(config, solution):
 
     # --- Crew 멤버에 대한 페널티 ---
     for e in all_employees:
-        start_d, end_d = crew_periods.get(e, (-1, -2)) # .get()으로 안전하게 접근
+        start_d, end_d = crewX_periods.get(e, (-1, -2)) # .get()으로 안전하게 접근
         is_crew_member = (end_d >= start_d)
 
         if is_crew_member:
@@ -83,22 +85,37 @@ def calculate_total_penalty(config, solution):
             
             total_calculated_penalty += (abs_diff_D + abs_diff_E + abs_diff_N) * PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']]
 
-    # 최대 초과 투입 시간에 대한 페널티
+    # 크루 주평균 40시간 초과에 대한 페널티
     current_over_values = []
     for e in all_employees:
-        start_d, end_d = crew_periods.get(e, (-1, -2))
-        is_crew_member = (end_d >= start_d)
-        if is_crew_member:
+        start_d, end_d = crewX_periods.get(e, (-1, -2))
+        current_over_value = 0
+
+        is_first_crew_member = (start_d > 1)  # 달의 전반기 크루 멤버
+        if is_first_crew_member:
             my_expected_hours = 0
-            if max(0, end_d - start_d + 1) > 0:
-                vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
-                effective_crew_days_in_period = max(0, end_d - start_d + 1) - vacation_days_in_crew_period
-                if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
+            vacation_days_in_crew_period = sum(1 for d in range(0, start_d - 1) if (e, d) in vacations)
+            effective_crew_days_in_period = max(0, start_d - 1) - vacation_days_in_crew_period
+            if effective_crew_days_in_period > 0:
+                my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))   # 올림
             
             current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
                                      for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
-            current_over_values.append(max(0, current_crew_hours - my_expected_hours))
+            current_over_value += max(0, current_crew_hours - my_expected_hours)
+
+        is_last_crew_member = (end_d < month_days) # 달의 후반기 크루 멤버
+        if is_last_crew_menber:
+            my_expected_hours = 0
+            vacation_days_in_crew_period = sum(1 for d in range(end_d + 1, month_days) if (e, d) in vacations)
+            effective_crew_days_in_period = max(end_d + 1, month_days) - vacation_days_in_crew_period
+            if effective_crew_days_in_period > 0:
+                my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))   # 올림
+            
+            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
+                                     for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
+            current_over_value += (max(0, current_crew_hours - my_expected_hours)
+
+        current_over_values.append(current_over_value)
     
     if current_over_values:
         max_over = max(current_over_values)
@@ -107,7 +124,7 @@ def calculate_total_penalty(config, solution):
     # 비-Crew 근무의 공정성에 대한 페널티
     current_non_crew_hours = []
     for e in all_employees:
-        start_d, end_d = crew_periods.get(e, (-1, -2))
+        start_d, end_d = crewX_periods.get(e, (-1, -2))
         is_crew_member = (end_d >= start_d)
         if not is_crew_member:
             current_non_crew_hours.append(sum(shift_hours.get(get_shift(e, d), 0) for d in all_days if get_shift(e, d) != 'off'))
@@ -195,7 +212,7 @@ def main():
         if 'year' in payload and 'month' in payload:
             year = int(payload['year'])
             month = int(payload['month'])
-            config['num_days'] = calendar.monthrange(year, month)[1]
+            config['num_days'] = month_days
             
         # B. 휴가일 적용
         if 'vacations' in payload:
@@ -204,15 +221,15 @@ def main():
                 new_vacations.append([int(emp), int(day) - 1]) # 0-indexed 변환
             config['vacations'] = new_vacations
             
-        # C. 크루 투입 기간 적용
+        # C. 크루 투입 안하는 기간 적용
         if 'durations' in payload:
             for emp_str, period in payload['durations'].items():
                 emp_int = int(emp_str)
                 start_day, end_day = period
                 if start_day == 0:
-                    config['crew_periods'][str(emp_int)] = [-1, -2]
+                    config['crewX_periods'][str(emp_int)] = [-1, -2]
                 else:
-                    config['crew_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
+                    config['crewX_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
 
         # D. 근무 비율 적용
         if 'ratios' in payload:
@@ -313,13 +330,13 @@ def print_schedule(config, solution, expected_hours):
     """
     num_days = config['num_days']
     num_employees = config['num_employees']
-    crew_periods = {int(k): tuple(v) for k, v in config['crew_periods'].items()}
+    crewX_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_hours = {s: config['shifts'][s]['hours'] for s in config['shifts']}
 
     print("\n--- Crew 기간 및 휴가 정보 ---")
     for e in range(num_employees):
-        start_d, end_d = crew_periods.get(e, (-1, -2))
+        start_d, end_d = crewX_periods.get(e, (-1, -2))
         if end_d >= start_d:
             print(f"  직원 {e:2d} | 기간: {start_d + 1:2d}일 - {end_d + 1:2d}일")
     
@@ -350,7 +367,7 @@ def print_schedule(config, solution, expected_hours):
         counts = {s: 0 for s in config['shifts']}
         total_hours = 0
         crew_hours = 0
-        start_d, end_d = crew_periods.get(e, (-1, -2))
+        start_d, end_d = crewX_periods.get(e, (-1, -2))
 
         for d in range(num_days):
             shift = solution.get(e, {}).get(d)
