@@ -40,5 +40,5 @@
         "shift_ratio_priority": "medium",
         "max_over_staffing_priority": "low"
     },
-    "solver_time_limit": 1000.0
+    "solver_time_limit": 120.0
 }
