@@ -1,153 +1,27 @@
 import json
 import os
 import calendar
-from scheduler import solve_monthly_crew_schedule, PENALTY_PRIORITY_MAP
+from scheduler import solve_monthly_crew_schedule
 from validation import validate_schedule
-
-def calculate_total_penalty(config, solution):
-    """
-    주어진 스케줄의 총 페널티를 설정을 기반으로 직접 계산합니다.
-    이 함수는 scheduler.py의 소프트 제약 조건 로직을 그대로 반영합니다.
-    """
-    total_calculated_penalty = 0
-    
-    num_days = config['num_days']
-    num_employees = config['num_employees']
-    all_employees = list(range(num_employees))
-    all_days = list(range(num_days))
-    
-    shifts = list(config['shifts'].keys())
-    shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
-
-    crew_break_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
-    vacations = [tuple(v) for v in config['vacations']]
-    shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
-    
-    penalties_config = config['penalties']
-
-    # 솔루션에서 특정 직원과 날짜의 근무를 가져오는 헬퍼 함수
-    def get_shift(e, d):
-        return solution.get(e, {}).get(d, 'off')
-
-    def get_crew_days(e):
-        break_start, break_end = crew_break_periods.get(e, (-1, -2))
-        if not (0 <= break_start <= break_end < num_days):
-            return []
-        return [d for d in all_days if not (break_start <= d <= break_end)]
-
-    def get_non_crew_days(e):
-        break_start, break_end = crew_break_periods.get(e, (-1, -2))
-        if not (0 <= break_start <= break_end < num_days):
-            return []
-        return [d for d in all_days if break_start <= d <= break_end]
-
-    # --- Crew 멤버에 대한 페널티 ---
-    for e in all_employees:
-        crew_days = get_crew_days(e)
-        is_crew_member = bool(crew_days)
-
-        if is_crew_member:
-            # 주간 평균 40시간 초과에 대한 페널티
-            current_total_hours = sum(shift_hours.get(get_shift(e, d), 0) for d in crew_days if get_shift(e, d) != 'off')
-            num_vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
-            effective_days = len(crew_days) - num_vacation_days
-            
-            if effective_days > 0:
-                hours_over_threshold = max(0, (7 * current_total_hours) - (40 * effective_days))
-                total_calculated_penalty += hours_over_threshold * PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']]
-
-            # 초과 투입 페널티 (인력 부족은 이제 하드 제약 조건임)
-            my_crew_days = len(crew_days)
-            my_expected_hours = 0
-            if my_crew_days > 0:
-                vacation_days_in_crew_period = sum(1 for d in crew_days if (e, d) in vacations)
-                effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
-                if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
-            
-            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0)
-                                     for d in crew_days if get_shift(e, d) != 'off')
-            
-            over = max(0, current_crew_hours - my_expected_hours)
-            total_calculated_penalty += over * PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']]
-        
-        # --- Crew 멤버가 아닌 직원에 대한 페널티 ---
-        else:
-            pass # 나중에 계산됨
-
-    # --- 모든 직원에 대한 페널티 ---
-    # 근무 비율 페널티
-    for e in all_employees:
-        w_D = sum(1 for d in all_days if get_shift(e, d) == 'D')
-        w_E = sum(1 for d in all_days if get_shift(e, d) == 'E')
-        w_N = sum(1 for d in all_days if get_shift(e, d) == 'N')
-        total_w = w_D + w_E + w_N
-        
-        r_D = shift_ratios[e]['D']
-        r_E = shift_ratios[e]['E']
-        r_N = shift_ratios[e]['N']
-        r_total = r_D + r_E + r_N
-        
-        if r_total > 0:
-            abs_diff_D = abs(r_total * w_D - r_D * total_w)
-            abs_diff_E = abs(r_total * w_E - r_E * total_w)
-            abs_diff_N = abs(r_total * w_N - r_N * total_w)
-            
-            total_calculated_penalty += (abs_diff_D + abs_diff_E + abs_diff_N) * PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']]
-
-    # 크루 기간 초과 투입의 최대값 페널티
-    current_over_values = []
-    for e in all_employees:
-        crew_days = get_crew_days(e)
-        vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
-        effective_crew_days = len(crew_days) - vacation_days
-        expected_hours = -int(-(effective_crew_days * 40 / 7.0)) if effective_crew_days > 0 else 0
-        crew_hours = sum(shift_hours.get(get_shift(e, d), 0)
-                          for d in crew_days if get_shift(e, d) != 'off')
-        current_over_values.append(max(0, crew_hours - expected_hours))
-    
-    if current_over_values:
-        max_over = max(current_over_values)
-        total_calculated_penalty += max_over * PENALTY_PRIORITY_MAP[penalties_config['max_over_staffing_priority']]
-        
-    # 비-Crew 근무의 공정성에 대한 페널티
-    current_non_crew_hours = []
-    for e in all_employees:
-        non_crew_days = get_non_crew_days(e)
-        current_non_crew_hour = sum(
-            shift_hours.get(get_shift(e, d), 0)
-            for d in non_crew_days
-            if get_shift(e, d) != 'off'
-        )
-        current_non_crew_hours.append(
-            current_non_crew_hour * 7 / len(non_crew_days)
-            if non_crew_days else 0
-        )
-    
-    max_nc = max(current_non_crew_hours)
-    min_nc = min(current_non_crew_hours)
-    total_calculated_penalty += (max_nc - min_nc) * PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
-        
-    # --- 전환 다양성 페널티 (같은 근무 연속 억제) ---
-    transition_priority = PENALTY_PRIORITY_MAP.get(
-        penalties_config.get('shift_transition_diversity_priority', 'medium'),
-        10
-    )
-
-    for e in all_employees:
-        for d in range(num_days - 1):
-            cur = get_shift(e, d)
-            nxt = get_shift(e, d + 1)
-            # 연속한 두 날 모두 근무이고, 같은 근무 타입이면 페널티
-            if cur != 'off' and nxt != 'off' and cur == nxt:
-                total_calculated_penalty += transition_priority
-    
-    return total_calculated_penalty
 
 
 def find_fixed_input_conflicts(config):
     """고정 입력만으로 즉시 판별할 수 있는 충돌을 찾습니다."""
     conflicts = []
+    crew_break_periods = config.get('crewX_periods', {})
+    for employee, period in crew_break_periods.items():
+        if not isinstance(period, (list, tuple)) or len(period) != 2:
+            conflicts.append(f"직원 {employee}번: 휴식 기간은 시작일과 종료일 두 값이어야 합니다.")
+            continue
+
+        start_day, end_day = period
+        if start_day == -1 and end_day == -2:
+            continue
+        if not (0 <= start_day <= end_day < config['num_days']):
+            conflicts.append(
+                f"직원 {employee}번: 휴식 기간은 1일부터 {config['num_days']}일 사이의 유효한 구간이어야 합니다."
+            )
+
     fixed_shifts = {
         int(employee): {int(day): shift for day, shift in shifts_by_day.items()}
         for employee, shifts_by_day in config.get('fixed_shifts', {}).items()
@@ -168,11 +42,6 @@ def find_fixed_input_conflicts(config):
                 conflicts.append(f"직원 {employee}번: {day}일과 {day + 1}일 사이 E->D 연속 근무가 금지됩니다.")
             if previous_shift == 'D' and current_shift == 'N':
                 conflicts.append(f"직원 {employee}번: {day}일과 {day + 1}일 사이 D->N 연속 근무가 금지됩니다.")
-
-        for shift in ('D', 'E', 'N'):
-            for start in range(config['num_days'] - 3):
-                if all(shifts_by_day.get(start + offset) == shift for offset in range(4)):
-                    conflicts.append(f"직원 {employee}번: {start + 1}일부터 {start + 4}일까지 {shift} 4일 연속은 금지됩니다.")
 
     for day in range(config['num_days']):
         for shift, group_list in required_by_group:
@@ -196,6 +65,7 @@ def main():
         config = json.load(f)
 
     # 2. 🌐 웹(GitHub Actions)에서 넘겨준 설정 파일(input.json) 읽기
+    duration_conflicts = []
     if os.path.exists('input.json'):
         print("--- 🌐 웹(Payload) 요청 감지: input.json 설정 업데이트 ---")
         with open('input.json', 'r', encoding='utf-8') as f:
@@ -218,8 +88,18 @@ def main():
         if 'durations' in payload:
             for emp_str, period in payload['durations'].items():
                 emp_int = int(emp_str)
+                if not isinstance(period, (list, tuple)) or len(period) != 2:
+                    duration_conflicts.append(f"직원 {emp_int}번: 휴식 기간은 시작일과 종료일 두 값이어야 합니다.")
+                    continue
                 start_day, end_day = period
-                if start_day <= 0 or end_day <= 0:
+                try:
+                    start_day = int(start_day)
+                    end_day = int(end_day)
+                except (TypeError, ValueError):
+                    duration_conflicts.append(f"직원 {emp_int}번: 휴식 기간은 숫자로 입력해야 합니다.")
+                    continue
+
+                if start_day == 0 and end_day == 0:
                     config['crewX_periods'][str(emp_int)] = [-1, -2]
                 else:
                     config['crewX_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
@@ -256,7 +136,7 @@ def main():
     print(f"{config.get('num_employees', 10)}명의 직원을 대상으로 {config.get('num_days', 31)}일간의 스케줄링을 진행합니다.")
     print(f"솔버 제한 시간: {config.get('solver_time_limit', 1000)}초")
 
-    conflicts = find_fixed_input_conflicts(config)
+    conflicts = duration_conflicts + find_fixed_input_conflicts(config)
     if conflicts:
         print("--- 고정 입력 충돌: 솔버 실행을 중단합니다 ---")
         for conflict in conflicts:
@@ -301,12 +181,14 @@ def main():
             
             # 통계 계산
             total_hours = sum(shift_hours_map.get(solution.get(e, {}).get(d, 'off'), 0) for d in range(num_days))
+            vacation_days = sum(1 for d in range(num_days) if (e, d) in config['vacations'])
+            effective_days = num_days - vacation_days
             d_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'D')
             e_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'E')
             n_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'N')
             
             output_data["stats"][e] = {
-                "avg_hours": round(total_hours / num_days * 7, 1),
+                "avg_hours": round(total_hours / effective_days * 7, 1) if effective_days > 0 else 0,
                 "D": d_count, "E": e_count, "N": n_count
             }
             

@@ -1,3 +1,4 @@
+import math
 from typing import Any, Dict, Tuple
 from ortools.sat.python import cp_model
 
@@ -85,35 +86,20 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddImplication(work[(e, d, 'E')], work[(e, d + 1, 'D')].Not())
             model.AddImplication(work[(e, d, 'D')], work[(e, d + 1, 'N')].Not())
 
-    # 최대 3일 연속 휴무
+    # TODO: 매직넘버 4는 허용할 수 있는 최대 연속 휴무일 수입니다.
+    # 5일 창에 근무 또는 휴가가 하나 이상 있어야 하므로 휴무는 최대 4일입니다.
     for e in all_employees:
-        for d in range(num_days - 3): 
-            worked_in_window = sum(work[(e, d + i, s)] for i in range(4) for s in shifts)
-            vacation_days_in_window = sum(1 for i in range(4) if (e, d + i) in vacations)
+        for d in range(num_days - 4):
+            worked_in_window = sum(work[(e, d + i, s)] for i in range(5) for s in shifts)
+            vacation_days_in_window = sum(1 for i in range(5) if (e, d + i) in vacations)
             model.Add(worked_in_window + vacation_days_in_window >= 1)
 
-    # 최대 5일 연속 근무
+    # TODO: 매직넘버 7은 허용할 수 있는 최대 연속 근무일 수입니다.
+    # 8일 창에서 근무일은 최대 7일입니다.
     for e in all_employees:
-        for d in range(num_days - 5):
-            worked_in_6days = sum(work[(e, d + i, s)] for i in range(6) for s in shifts)
-            model.Add(worked_in_6days <= 5)
-
-    # 최대 3일 연속 동일 근무
-    for e in all_employees:
-        for s in shifts:
-            for d in range(num_days - 3):
-                model.Add(sum(work[(e, d + i, s)] for i in range(4)) <= 3)
-
-    # [하드 제약 조건] 직원당 월별 'N N' 시퀀스 최대 1회
-    for e in all_employees:
-        n_to_n_vars_for_employee = []
-        for d in range(num_days - 1):
-            n_to_n_d = model.NewBoolVar(f'n_to_n_hard_{e}_{d}')
-            model.Add(n_to_n_d == 1).OnlyEnforceIf([work[(e, d, 'N')], work[(e, d + 1, 'N')]])
-            model.Add(n_to_n_d == 0).OnlyEnforceIf(work[(e, d, 'N')].Not())
-            model.Add(n_to_n_d == 0).OnlyEnforceIf(work[(e, d + 1, 'N')].Not())
-            n_to_n_vars_for_employee.append(n_to_n_d)
-        model.Add(sum(n_to_n_vars_for_employee) <= 1)
+        for d in range(num_days - 7):
+            worked_in_8days = sum(work[(e, d + i, s)] for i in range(8) for s in shifts)
+            model.Add(worked_in_8days <= 7)
 
     # --- [4] 소프트 제약 조건 (페널티) ---
     penalties = []
@@ -125,10 +111,12 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     for e in all_employees:
         break_start, break_end = crew_break_periods.get(e, (-1, -2))
         has_break_period = 0 <= break_start <= break_end < num_days
-        crew_days = [
-            d for d in all_days
-            if has_break_period and not (break_start <= d <= break_end)
-        ]
+        crew_cycles = []
+        if has_break_period:
+            first_cycle = list(range(0, break_start))
+            second_cycle = list(range(break_end + 1, num_days))
+            crew_cycles = [cycle for cycle in (first_cycle, second_cycle) if cycle]
+        crew_days = [d for cycle in crew_cycles for d in cycle]
         non_crew_days = [
             d for d in all_days
             if has_break_period and break_start <= d <= break_end
@@ -154,41 +142,35 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
 
         # --- Crew 멤버에 대한 페널티 ---
         if is_crew_member:
-            total_hours = sum(work[(e, d, s)] * shift_hours[s] for d in crew_days for s in shifts)
-            num_vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
-            effective_days = len(crew_days) - num_vacation_days
-            
-            if effective_days > 0:
-                over_40h_avg_var = model.NewIntVar(0, 7 * 500, f'over_40h_avg_var_{e}')
-                model.Add(over_40h_avg_var >= (7 * total_hours) - (40 * effective_days))
-                
-                over_40h_avg_penalty = model.NewIntVar(0, 7 * 500 * 1000, f'over_40h_avg_penalty_{e}')
-                # 크루기간 동안 주 평균 근무시간이 40시간을 초과하면 페널티 부여
-                model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
-                penalties.append(over_40h_avg_penalty)
+            expected_hours_analysis[e] = 0
+            for cycle_index, cycle_days in enumerate(crew_cycles):
+                total_hours = sum(work[(e, d, s)] * shift_hours[s] for d in cycle_days for s in shifts)
+                num_vacation_days = sum(1 for d in cycle_days if (e, d) in vacations)
+                effective_days = len(cycle_days) - num_vacation_days
 
-            my_crew_days = len(crew_days)
-            my_expected_hours = 0
-            if my_crew_days > 0:
-                vacation_days_in_crew_period = sum(1 for d in crew_days if (e, d) in vacations)
-                effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
-                if effective_crew_days_in_period > 0:
-                    my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
-            
-            expected_hours_analysis[e] = my_expected_hours
+                if effective_days > 0:
+                    over_40h_avg_var = model.NewIntVar(0, 7 * 500, f'over_40h_avg_var_{e}_{cycle_index}')
+                    model.Add(over_40h_avg_var >= (7 * total_hours) - (40 * effective_days))
 
-            if my_crew_days > 0:
-                crew_hours = sum(work[(e, d, s)] * shift_hours[s]
-                                 for d in crew_days
-                                 for s in shifts)
-                
-                model.Add(crew_hours >= my_expected_hours)
+                    over_40h_avg_penalty = model.NewIntVar(0, 7 * 500 * 1000, f'over_40h_avg_penalty_{e}_{cycle_index}')
+                    # TODO: 매직넘버 40은 Crew 주 평균 기준시간입니다.
+                    model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
+                    penalties.append(over_40h_avg_penalty)
 
-                over = model.NewIntVar(0, 500, f'over_e{e}')
-                model.Add(over >= crew_hours - my_expected_hours)
+                expected_hours = 0
+                if effective_days > 0:
+                    # TODO: 매직넘버 7은 주간 일수입니다.
+                    expected_hours = math.ceil(effective_days * 40 / 7.0)
+                expected_hours_analysis[e] += expected_hours
 
-                over_penalty = model.NewIntVar(0, 500 * 1000, f'over_penalty_{e}')
-                # 크루기간 동안 근무시간이 기대치보다 많으면 페널티 부여
+                crew_hours = sum(work[(e, d, s)] * shift_hours[s] for d in cycle_days for s in shifts)
+                model.Add(crew_hours >= expected_hours)
+
+                over = model.NewIntVar(0, 500, f'over_e{e}_{cycle_index}')
+                model.Add(over >= crew_hours - expected_hours)
+
+                over_penalty = model.NewIntVar(0, 500 * 1000, f'over_penalty_{e}_{cycle_index}')
+                # 주기별 Crew 기간에서 기대시간보다 많이 근무하면 페널티 부여
                 model.AddMultiplicationEquality(over_penalty, over, PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']])
                 penalties.append(over_penalty)
                 over_vars.append(over)
@@ -255,6 +237,10 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         for d in range(num_days - 1):
             n_to_n = model.NewBoolVar(f'n_to_n_soft_{e}_{d}')
             model.AddBoolAnd([work[(e, d, 'N')], work[(e, d + 1, 'N')]]).OnlyEnforceIf(n_to_n)
+            model.AddBoolOr([
+                work[(e, d, 'N')].Not(),
+                work[(e, d + 1, 'N')].Not(),
+            ]).OnlyEnforceIf(n_to_n.Not())
             
             nn_penalty = model.NewIntVar(0, 1 * 1000, f'nn_penalty_soft_{e}_{d}')
             model.AddMultiplicationEquality(nn_penalty, n_to_n, PENALTY_PRIORITY_MAP[penalties_config['consecutive_n_shifts_priority']])
@@ -350,7 +336,10 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             output_data["schedule"][e] = {d: (solution[e][d] if solution[e][d] != 'off' else '-') for d in all_days}
             
             # 통계 데이터 계산
-            avg_hours = sum(shift_hours.get(solution[e][d], 0) for d in all_days) / num_days * 7
+            total_hours = sum(shift_hours.get(solution[e][d], 0) for d in all_days)
+            vacation_days = sum(1 for d in all_days if (e, d) in vacations)
+            effective_days = num_days - vacation_days
+            avg_hours = total_hours / effective_days * 7 if effective_days > 0 else 0
             d_count = sum(1 for d in all_days if solution[e][d] == 'D')
             e_count = sum(1 for d in all_days if solution[e][d] == 'E')
             n_count = sum(1 for d in all_days if solution[e][d] == 'N')

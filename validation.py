@@ -64,23 +64,18 @@ def validate_schedule(config, solution):
             if solution[e][d] == 'D' and solution[e][d+1] == 'N':
                 violations.append(f"검증 오류: 직원 {e}가 {d+1}일에 금지된 D -> N 연속 근무를 합니다.")
 
-        # 최대 4일 연속 휴무 (즉, 5일 연속 휴무 불가)
+        # TODO: 매직넘버 4는 허용할 수 있는 최대 연속 휴무일 수입니다.
+        # 5일 연속 비근무일은 허용하지 않습니다.
         for d in range(num_days - 4):
             # 휴가가 아니고 근무가 'off'인 경우 '휴무'로 간주
             is_off_day = lambda day: solution[e][day] == 'off' and (e, day) not in vacations
-            if all(is_off_day(d+i) for i in range(4)):
-                 violations.append(f"검증 오류: 직원 {e}가 {d+1}일부터 5일 이상 연속으로 휴무합니다.")
+            if all(is_off_day(d+i) for i in range(5)):
+                violations.append(f"검증 오류: 직원 {e}가 {d+1}일부터 5일 이상 연속으로 휴무합니다.")
 
-        # 최대 7일 연속 근무
+        # TODO: 매직넘버 7은 허용할 수 있는 최대 연속 근무일 수입니다.
         for d in range(num_days - 7):
             is_working = lambda day: solution[e][day] != 'off' and (e, day) not in vacations
             if sum(is_working(d+i) for i in range(8)) > 7:
                 violations.append(f"검증 오류: 직원 {e}가 {d+1}일부터 8일 이상 연속으로 근무합니다.")
-
-        # 최대 3일 연속 동일 근무
-        for s in shifts:
-            for d in range(num_days - 3):
-                if all(solution[e][d+i] == s for i in range(4)):
-                    violations.append(f"검증 오류: 직원 {e}가 {d+1}일부터 4일 이상 연속으로 '{s}' 근무를 합니다.")
 
     return violations
