@@ -26,7 +26,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     shifts = list(config['shifts'].keys())
     shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
 
-    crew_periods = {int(k): tuple(v) for k, v in config['crew_periods'].items()}
+    crew_break_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
     fixed_shifts = {
@@ -123,16 +123,22 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     expected_hours_analysis = {}
 
     for e in all_employees:
-        start_d, end_d = crew_periods[e]
-        is_crew_member = (end_d >= start_d)
+        break_start, break_end = crew_break_periods.get(e, (-1, -2))
+        has_break_period = 0 <= break_start <= break_end < num_days
+        crew_days = [
+            d for d in all_days
+            if has_break_period and not (break_start <= d <= break_end)
+        ]
+        non_crew_days = [
+            d for d in all_days
+            if has_break_period and break_start <= d <= break_end
+        ]
+        is_crew_member = bool(crew_days)
 
         # -------------------------------------------------------------------
         # 🎯 [수정 및 핵심 반영] 크루도 아니고 휴가도 아닌 '순수 일반 근무 가능일' 계산
         # -------------------------------------------------------------------
-        normal_days = [
-            d for d in all_days 
-            if not (start_d <= d <= end_d) and ((e, d) not in vacations)
-        ]
+        normal_days = [d for d in non_crew_days if (e, d) not in vacations]
         num_normal_days = len(normal_days)
         
         if num_normal_days > 0:
@@ -148,9 +154,9 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
 
         # --- Crew 멤버에 대한 페널티 ---
         if is_crew_member:
-            total_hours = sum(work[(e, d, s)] * shift_hours[s] for d in all_days for s in shifts)
-            num_vacation_days = sum(1 for d in all_days if (e, d) in vacations)
-            effective_days = num_days - num_vacation_days
+            total_hours = sum(work[(e, d, s)] * shift_hours[s] for d in crew_days for s in shifts)
+            num_vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
+            effective_days = len(crew_days) - num_vacation_days
             
             if effective_days > 0:
                 over_40h_avg_var = model.NewIntVar(0, 7 * 500, f'over_40h_avg_var_{e}')
@@ -161,10 +167,10 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
                 penalties.append(over_40h_avg_penalty)
 
-            my_crew_days = max(0, end_d - start_d + 1)
+            my_crew_days = len(crew_days)
             my_expected_hours = 0
             if my_crew_days > 0:
-                vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
+                vacation_days_in_crew_period = sum(1 for d in crew_days if (e, d) in vacations)
                 effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
                 if effective_crew_days_in_period > 0:
                     my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
@@ -172,9 +178,9 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             expected_hours_analysis[e] = my_expected_hours
 
             if my_crew_days > 0:
-                crew_hours = sum(work[(e, d, s)] * shift_hours[s] 
-                                     for d in range(start_d, end_d + 1) if 0 <= d < num_days
-                                     for s in shifts)
+                crew_hours = sum(work[(e, d, s)] * shift_hours[s]
+                                 for d in crew_days
+                                 for s in shifts)
                 
                 model.Add(crew_hours >= my_expected_hours)
 

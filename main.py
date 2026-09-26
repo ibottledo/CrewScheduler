@@ -4,8 +4,6 @@ import calendar
 from scheduler import solve_monthly_crew_schedule, PENALTY_PRIORITY_MAP
 from validation import validate_schedule
 
-month_days = calendar.monthrange(year, month)[1]
-
 def calculate_total_penalty(config, solution):
     """
     주어진 스케줄의 총 페널티를 설정을 기반으로 직접 계산합니다.
@@ -21,7 +19,7 @@ def calculate_total_penalty(config, solution):
     shifts = list(config['shifts'].keys())
     shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
 
-    crewX_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
+    crew_break_periods = {int(k): tuple(v) for k, v in config['crewX_periods'].items()}
     vacations = [tuple(v) for v in config['vacations']]
     shift_ratios = {int(k): v for k, v in config['shift_ratios'].items()}
     
@@ -31,32 +29,44 @@ def calculate_total_penalty(config, solution):
     def get_shift(e, d):
         return solution.get(e, {}).get(d, 'off')
 
+    def get_crew_days(e):
+        break_start, break_end = crew_break_periods.get(e, (-1, -2))
+        if not (0 <= break_start <= break_end < num_days):
+            return []
+        return [d for d in all_days if not (break_start <= d <= break_end)]
+
+    def get_non_crew_days(e):
+        break_start, break_end = crew_break_periods.get(e, (-1, -2))
+        if not (0 <= break_start <= break_end < num_days):
+            return []
+        return [d for d in all_days if break_start <= d <= break_end]
+
     # --- Crew 멤버에 대한 페널티 ---
     for e in all_employees:
-        start_d, end_d = crewX_periods.get(e, (-1, -2)) # .get()으로 안전하게 접근
-        is_crew_member = (end_d >= start_d)
+        crew_days = get_crew_days(e)
+        is_crew_member = bool(crew_days)
 
         if is_crew_member:
             # 주간 평균 40시간 초과에 대한 페널티
-            current_total_hours = sum(shift_hours.get(get_shift(e, d), 0) for d in all_days if get_shift(e, d) != 'off')
-            num_vacation_days = sum(1 for d in all_days if (e, d) in vacations)
-            effective_days = num_days - num_vacation_days
+            current_total_hours = sum(shift_hours.get(get_shift(e, d), 0) for d in crew_days if get_shift(e, d) != 'off')
+            num_vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
+            effective_days = len(crew_days) - num_vacation_days
             
             if effective_days > 0:
                 hours_over_threshold = max(0, (7 * current_total_hours) - (40 * effective_days))
                 total_calculated_penalty += hours_over_threshold * PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']]
 
             # 초과 투입 페널티 (인력 부족은 이제 하드 제약 조건임)
-            my_crew_days = max(0, end_d - start_d + 1)
+            my_crew_days = len(crew_days)
             my_expected_hours = 0
             if my_crew_days > 0:
-                vacation_days_in_crew_period = sum(1 for d in range(start_d, end_d + 1) if (e, d) in vacations)
+                vacation_days_in_crew_period = sum(1 for d in crew_days if (e, d) in vacations)
                 effective_crew_days_in_period = my_crew_days - vacation_days_in_crew_period
                 if effective_crew_days_in_period > 0:
                     my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))
             
-            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
-                                     for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
+            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0)
+                                     for d in crew_days if get_shift(e, d) != 'off')
             
             over = max(0, current_crew_hours - my_expected_hours)
             total_calculated_penalty += over * PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']]
@@ -85,37 +95,16 @@ def calculate_total_penalty(config, solution):
             
             total_calculated_penalty += (abs_diff_D + abs_diff_E + abs_diff_N) * PENALTY_PRIORITY_MAP[penalties_config['shift_ratio_priority']]
 
-    # 크루 주평균 40시간 초과에 대한 페널티
+    # 크루 기간 초과 투입의 최대값 페널티
     current_over_values = []
     for e in all_employees:
-        start_d, end_d = crewX_periods.get(e, (-1, -2))
-        current_over_value = 0
-
-        is_first_crew_member = (start_d > 1)  # 달의 전반기 크루 멤버
-        if is_first_crew_member:
-            my_expected_hours = 0
-            vacation_days_in_crew_period = sum(1 for d in range(0, start_d - 1) if (e, d) in vacations)
-            effective_crew_days_in_period = max(0, start_d - 1) - vacation_days_in_crew_period
-            if effective_crew_days_in_period > 0:
-                my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))   # 올림
-            
-            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
-                                     for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
-            current_over_value += max(0, current_crew_hours - my_expected_hours)
-
-        is_last_crew_member = (end_d < month_days) # 달의 후반기 크루 멤버
-        if is_last_crew_menber:
-            my_expected_hours = 0
-            vacation_days_in_crew_period = sum(1 for d in range(end_d + 1, month_days) if (e, d) in vacations)
-            effective_crew_days_in_period = max(end_d + 1, month_days) - vacation_days_in_crew_period
-            if effective_crew_days_in_period > 0:
-                my_expected_hours = -int(-(effective_crew_days_in_period * 40 / 7.0))   # 올림
-            
-            current_crew_hours = sum(shift_hours.get(get_shift(e, d), 0) 
-                                     for d in range(start_d, end_d + 1) if 0 <= d < num_days and get_shift(e, d) != 'off')
-            current_over_value += (max(0, current_crew_hours - my_expected_hours)
-
-        current_over_values.append(current_over_value)
+        crew_days = get_crew_days(e)
+        vacation_days = sum(1 for d in crew_days if (e, d) in vacations)
+        effective_crew_days = len(crew_days) - vacation_days
+        expected_hours = -int(-(effective_crew_days * 40 / 7.0)) if effective_crew_days > 0 else 0
+        crew_hours = sum(shift_hours.get(get_shift(e, d), 0)
+                          for d in crew_days if get_shift(e, d) != 'off')
+        current_over_values.append(max(0, crew_hours - expected_hours))
     
     if current_over_values:
         max_over = max(current_over_values)
@@ -124,18 +113,22 @@ def calculate_total_penalty(config, solution):
     # 비-Crew 근무의 공정성에 대한 페널티
     current_non_crew_hours = []
     for e in all_employees:
-        start_d, end_d = crewX_periods.get(e, (-1, -2))
-        is_crew_member = (end_d >= start_d)
-        if not is_crew_member:
-            current_non_crew_hours.append(sum(shift_hours.get(get_shift(e, d), 0) for d in all_days if get_shift(e, d) != 'off'))
+        non_crew_days = get_non_crew_days(e)
+        current_non_crew_hour = sum(
+            shift_hours.get(get_shift(e, d), 0)
+            for d in non_crew_days
+            if get_shift(e, d) != 'off'
+        )
+        current_non_crew_hours.append(
+            current_non_crew_hour * 7 / len(non_crew_days)
+            if non_crew_days else 0
+        )
     
-    if current_non_crew_hours:
-        max_nc = max(current_non_crew_hours)
-        min_nc = min(current_non_crew_hours)
-        total_calculated_penalty += (max_nc - min_nc) * PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
-        total_calculated_penalty += sum(current_non_crew_hours) * PENALTY_PRIORITY_MAP[penalties_config['non_crew_work_priority']]
+    max_nc = max(current_non_crew_hours)
+    min_nc = min(current_non_crew_hours)
+    total_calculated_penalty += (max_nc - min_nc) * PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
         
-        # --- 전환 다양성 페널티 (같은 근무 연속 억제) ---
+    # --- 전환 다양성 페널티 (같은 근무 연속 억제) ---
     transition_priority = PENALTY_PRIORITY_MAP.get(
         penalties_config.get('shift_transition_diversity_priority', 'medium'),
         10
@@ -212,7 +205,7 @@ def main():
         if 'year' in payload and 'month' in payload:
             year = int(payload['year'])
             month = int(payload['month'])
-            config['num_days'] = month_days
+            config['num_days'] = calendar.monthrange(year, month)[1]
             
         # B. 휴가일 적용
         if 'vacations' in payload:
@@ -221,12 +214,12 @@ def main():
                 new_vacations.append([int(emp), int(day) - 1]) # 0-indexed 변환
             config['vacations'] = new_vacations
             
-        # C. 크루 투입 안하는 기간 적용
+        # C. 크루 휴식 기간 적용
         if 'durations' in payload:
             for emp_str, period in payload['durations'].items():
                 emp_int = int(emp_str)
                 start_day, end_day = period
-                if start_day == 0:
+                if start_day <= 0 or end_day <= 0:
                     config['crewX_periods'][str(emp_int)] = [-1, -2]
                 else:
                     config['crewX_periods'][str(emp_int)] = [start_day - 1, end_day - 1]
@@ -334,11 +327,11 @@ def print_schedule(config, solution, expected_hours):
     vacations = [tuple(v) for v in config['vacations']]
     shift_hours = {s: config['shifts'][s]['hours'] for s in config['shifts']}
 
-    print("\n--- Crew 기간 및 휴가 정보 ---")
+    print("\n--- Crew 휴식 기간 및 휴가 정보 ---")
     for e in range(num_employees):
         start_d, end_d = crewX_periods.get(e, (-1, -2))
-        if end_d >= start_d:
-            print(f"  직원 {e:2d} | 기간: {start_d + 1:2d}일 - {end_d + 1:2d}일")
+        if 0 <= start_d <= end_d < num_days:
+            print(f"  직원 {e:2d} | 휴식: {start_d + 1:2d}일 - {end_d + 1:2d}일")
     
     my_vacations = {e: [] for e in range(num_employees)}
     for e, d in vacations:
@@ -375,7 +368,7 @@ def print_schedule(config, solution, expected_hours):
                 counts[shift] += 1
                 hours = shift_hours.get(shift, 0)
                 total_hours += hours
-                if start_d <= d <= end_d:
+                if 0 <= start_d <= end_d < num_days and (d < start_d or d > end_d):
                     crew_hours += hours
         
         num_vacation_days = len(my_vacations.get(e, []))
