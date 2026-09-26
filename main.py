@@ -192,19 +192,20 @@ def main():
         
         for e in range(config.get('num_employees', 10)):
             # 휴가는 결과 자체에 V로 저장해 프론트가 별도 목록에 의존하지 않도록 합니다.
-            output_data["schedule"][e] = {
+            schedule_row = {
                 d: 'V' if (e, d) in vacation_set else (
                     solution.get(e, {}).get(d) if solution.get(e, {}).get(d) != 'off' else '-'
                 )
                 for d in range(num_days)
             }
+            output_data["schedule"][e] = schedule_row
             
             # 통계 계산
-            total_hours = sum(shift_hours_map.get(solution.get(e, {}).get(d, 'off'), 0) for d in range(num_days))
+            total_hours = sum(shift_hours_map.get(shift, 0) for shift in schedule_row.values())
             effective_days = num_days - sum(1 for employee, day in vacation_set if employee == e)
-            d_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'D')
-            e_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'E')
-            n_count = sum(1 for d in range(num_days) if solution.get(e, {}).get(d) == 'N')
+            d_count = sum(shift == 'D' for shift in schedule_row.values())
+            e_count = sum(shift == 'E' for shift in schedule_row.values())
+            n_count = sum(shift == 'N' for shift in schedule_row.values())
             
             output_data["stats"][e] = {
                 "avg_hours": round(total_hours / effective_days * 7, 1) if effective_days > 0 else 0,
