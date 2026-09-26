@@ -249,6 +249,32 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddMultiplicationEquality(nn_penalty, n_to_n, PENALTY_PRIORITY_MAP[penalties_config['consecutive_n_shifts_priority']])
             penalties.append(nn_penalty)
 
+    # 연속 근무일이 길수록 더 큰 페널티를 부여합니다.
+    consecutive_work_priority = PENALTY_PRIORITY_MAP.get(
+        penalties_config.get('consecutive_work_days_priority', 'high'),
+        100
+    )
+    for e in all_employees:
+        worked_days = []
+        for d in all_days:
+            worked_day = model.NewBoolVar(f'worked_day_e{e}_d{d}')
+            model.AddMaxEquality(worked_day, [work[(e, d, s)] for s in shifts])
+            worked_days.append(worked_day)
+
+        for run_length in range(2, min(7, num_days) + 1):
+            # 긴 연속근무 창일수록 가중치를 키워 근무를 분산시킵니다.
+            window_penalty_weight = consecutive_work_priority * (run_length - 1)
+            for start_day in range(num_days - run_length + 1):
+                consecutive_run = model.NewBoolVar(
+                    f'consecutive_work_e{e}_d{start_day}_len{run_length}'
+                )
+                window = worked_days[start_day:start_day + run_length]
+                model.AddBoolAnd(window).OnlyEnforceIf(consecutive_run)
+                model.AddBoolOr([worked_day.Not() for worked_day in window]).OnlyEnforceIf(
+                    consecutive_run.Not()
+                )
+                penalties.append(window_penalty_weight * consecutive_run)
+
     # 최대 초과 투입 시간에 대한 페널티
     max_over = model.NewIntVar(0, 500, 'max_over')
     if over_vars:

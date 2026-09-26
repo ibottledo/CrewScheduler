@@ -40,6 +40,7 @@
         "over_staffing_priority": "highest",
         "fairness_of_non_crew_work_priority": "highest",
         "consecutive_n_shifts_priority": "high",
+        "consecutive_work_days_priority": "high",
         "shift_transition_diversity_priority": "medium",
         "shift_ratio_priority": "medium",
         "max_over_staffing_priority": "low"
