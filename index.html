@@ -36,13 +36,9 @@
 
   <h2>Scheduler</h2>
 
-  <!-- 토큰 및 연/월 설정부 -->
+  <!-- 연/월 설정부 -->
   <div class="card">
-    <div id="tokenSection">
-      <label>PAT (Personal Access Token)</label>
-      <input type="password" id="token" placeholder="GitHub PAT 입력">
-    </div>
-    <div id="authStatus" class="status-badge hidden">🔒 링크 인증 완료 (토큰 자동 적용됨)</div>
+    <div class="status-badge">공개 사용 모드</div>
     
     <div style="display: flex; gap: 10px;">
       <div style="flex:1;">
@@ -117,27 +113,9 @@
     let ratiosMap = {};    
     let fixedShiftsMap = {};
     let daysInMonth = 31;
+    const SCHEDULER_API_URL = 'https://YOUR-WORKER.workers.dev';
 
     window.onload = function() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tokenFromUrl = urlParams.get('t');
-
-      if (tokenFromUrl) {
-        // dummy_ 자동 제거 로직 포함 (README 꼼수 적용 가능)
-        const cleanToken = tokenFromUrl.replace('dummy_', '').trim();
-        localStorage.setItem('crew_scheduler_pat', cleanToken);
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-
-      const savedToken = localStorage.getItem('crew_scheduler_pat');
-      const tokenInput = document.getElementById('token');
-
-      if (savedToken) {
-        tokenInput.value = savedToken;
-        document.getElementById('tokenSection').classList.add('hidden');
-        document.getElementById('authStatus').classList.remove('hidden');
-      }
-
       initMonth();
     };
 
@@ -186,35 +164,28 @@
 
     // 근무표 생성 요청 (GitHub Actions 트리거)
     async function sendRequest() {
-      let token = document.getElementById('token').value.trim() || localStorage.getItem('crew_scheduler_pat');
-      if (!token) return alert('❌ PAT를 입력해 주세요!');
-
-      localStorage.setItem('crew_scheduler_pat', token);
-
       const payload = {
-        event_type: 'generate_schedule',
-        client_payload: {
-          year: parseInt(document.getElementById('year').value),
-          month: parseInt(document.getElementById('month').value),
-          solver_time_limit: parseFloat(document.getElementById('solverTimeLimit').value),
-          durations: durationsMap,
-          full_month_crew: fullMonthCrewMap,
-          ratios: ratiosMap,
-          fixed_shifts: fixedShiftsMap
-        }
+        year: parseInt(document.getElementById('year').value),
+        month: parseInt(document.getElementById('month').value),
+        solver_time_limit: parseFloat(document.getElementById('solverTimeLimit').value),
+        durations: durationsMap,
+        full_month_crew: fullMonthCrewMap,
+        ratios: ratiosMap,
+        fixed_shifts: fixedShiftsMap
       };
 
       try {
-        const res = await fetch('https://api.github.com/repos/ibottledo/CrewScheduler/dispatches', {
+        const res = await fetch(SCHEDULER_API_URL, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
         if (res.ok) {
           alert('✅ 스케줄러가 가동되었습니다!\n약 30초 뒤에 하단의 [근무표 가져오기] 버튼을 눌러주세요.');
         } else {
-          alert(`❌ 요청 실패 (상태 코드: ${res.status})\n권한을 확인하세요.`);
+          const error = await res.json().catch(() => ({}));
+          alert(`❌ 요청 실패 (상태 코드: ${res.status})\n${error.error || 'Worker 설정을 확인하세요.'}`);
         }
       } catch (err) {
         alert('❌ 네트워크 오류가 발생했습니다.');
