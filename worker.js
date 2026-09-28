@@ -1,12 +1,8 @@
 const REPOSITORY_DISPATCH_URL = 'https://api.github.com/repos/ibottledo/CrewScheduler/dispatches';
 
 function corsHeaders(request, env) {
-  const origin = request.headers.get('Origin');
-  const allowedOrigin = env.ALLOWED_ORIGIN || '*';
-  const originHeader = allowedOrigin === '*' || origin === allowedOrigin ? origin || '*' : allowedOrigin;
-
   return {
-    'Access-Control-Allow-Origin': originHeader,
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
