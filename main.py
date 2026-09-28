@@ -5,8 +5,127 @@ from scheduler import solve_monthly_crew_schedule
 from validation import validate_schedule
 
 
+def _payload_int(value):
+    if isinstance(value, bool):
+        raise ValueError
+    parsed = int(value)
+    if isinstance(value, float) and value != parsed:
+        raise ValueError
+    return parsed
+
+
+def validate_payload(payload, config):
+    """웹 payload를 스케줄러에 적용하기 전에 형식과 범위를 확인합니다."""
+    if not isinstance(payload, dict):
+        return ["요청 데이터는 객체 형식이어야 합니다."]
+
+    errors = []
+    num_employees = config['num_employees']
+    num_days = config['num_days']
+
+    try:
+        year = _payload_int(payload.get('year', 0))
+        month = _payload_int(payload.get('month', 0))
+        if not (1 <= year <= 9999 and 1 <= month <= 12):
+            raise ValueError
+        num_days = calendar.monthrange(year, month)[1]
+    except (AttributeError, TypeError, ValueError):
+        errors.append("연도와 월은 유효한 숫자여야 합니다.")
+
+    if 'solver_time_limit' in payload:
+        try:
+            if float(payload['solver_time_limit']) <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append("솔버 제한 시간은 0보다 큰 숫자(초)여야 합니다.")
+
+    vacations = payload.get('vacations', [])
+    if not isinstance(vacations, list):
+        errors.append("휴가 목록은 배열 형식이어야 합니다.")
+        vacations = []
+    for vacation in vacations:
+        try:
+            if not isinstance(vacation, (list, tuple)) or len(vacation) != 2:
+                raise ValueError
+            emp, day = vacation
+            employee = _payload_int(emp)
+            vacation_day = _payload_int(day)
+            if not (0 <= employee < num_employees and 1 <= vacation_day <= num_days):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append("휴가의 직원 번호와 날짜가 유효하지 않습니다.")
+
+    full_month_crew = payload.get('full_month_crew', {})
+    if not isinstance(full_month_crew, dict):
+        errors.append("전체 Crew 설정은 객체 형식이어야 합니다.")
+        full_month_crew = {}
+    for employee, enabled in full_month_crew.items():
+        try:
+            if not (0 <= _payload_int(employee) < num_employees) or not isinstance(enabled, bool):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append("전체 Crew 설정의 직원 번호 또는 값이 유효하지 않습니다.")
+
+    durations = payload.get('durations', {})
+    if not isinstance(durations, dict):
+        errors.append("크루 휴식 기간 설정은 객체 형식이어야 합니다.")
+        durations = {}
+    for employee, period in durations.items():
+        try:
+            employee = _payload_int(employee)
+            if not (0 <= employee < num_employees) or not isinstance(period, (list, tuple)) or len(period) != 2:
+                raise ValueError
+            start_day = _payload_int(period[0])
+            end_day = _payload_int(period[1])
+            if not ((start_day == 0 and end_day == 0) or (1 <= start_day <= end_day <= num_days)):
+                raise ValueError
+        except (TypeError, ValueError):
+            errors.append("크루 휴식 기간은 0, 0 또는 유효한 시작일과 종료일이어야 합니다.")
+
+    ratios = payload.get('ratios', {})
+    if not isinstance(ratios, dict):
+        errors.append("근무 비율 설정은 객체 형식이어야 합니다.")
+        ratios = {}
+    for employee, ratio in ratios.items():
+        try:
+            employee = _payload_int(employee)
+            if not (0 <= employee < num_employees) or not isinstance(ratio, dict):
+                raise ValueError
+            ratio_values = [_payload_int(ratio[shift]) for shift in ('D', 'E', 'N')]
+            if any(value < 0 for value in ratio_values) or sum(ratio_values) == 0:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            errors.append("근무 비율은 D, E, N에 대한 0 이상인 값 중 하나 이상을 입력해야 합니다.")
+
+    fixed_shifts = payload.get('fixed_shifts', {})
+    if not isinstance(fixed_shifts, dict):
+        errors.append("고정 근무표는 객체 형식이어야 합니다.")
+        fixed_shifts = {}
+    for employee, shifts_by_day in fixed_shifts.items():
+        try:
+            employee = _payload_int(employee)
+            if not (0 <= employee < num_employees) or not isinstance(shifts_by_day, dict):
+                raise ValueError
+            for day, shift in shifts_by_day.items():
+                day = _payload_int(day)
+                if not (1 <= day <= num_days) or str(shift).strip().upper() not in ('D', 'E', 'N', 'OFF', '휴가'):
+                    raise ValueError
+        except (TypeError, ValueError):
+            errors.append("고정 근무표의 직원 번호, 날짜 또는 근무 유형이 유효하지 않습니다.")
+
+    merged_shifts = payload.get('merged_shifts', config.get('merged_shifts', {'E': True, 'N': False}))
+    if not isinstance(merged_shifts, dict):
+        errors.append("E/N 합병 설정은 객체 형식이어야 합니다.")
+    else:
+        for shift in ('E', 'N'):
+            if shift in merged_shifts and not isinstance(merged_shifts[shift], bool):
+                errors.append(f"{shift} 합병 설정은 true 또는 false여야 합니다.")
+
+    return errors
+
+
 def find_fixed_input_conflicts(config):
-    """고정 입력만으로 즉시 판별할 수 있는 충돌을 찾습니다."""
+    """고정 입력에서 즉시 판별할 수 있는 충돌을 찾습니다."""
     conflicts = []
     crew_break_periods = config.get('crewX_periods', {})
     for employee, period in crew_break_periods.items():
@@ -28,7 +147,17 @@ def find_fixed_input_conflicts(config):
     }
     vacations = {tuple(vacation) for vacation in config.get('vacations', [])}
     groups = [config['groups']['a'], config['groups']['b']]
-    required_by_group = [('D', groups), ('N', groups)]
+    merged_shifts = config.get('merged_shifts', {'E': True, 'N': False})
+    required_by_group = [('D', groups)]
+    required_by_group.extend(
+        (shift, groups)
+        for shift in ('E', 'N')
+        if not merged_shifts.get(shift, False)
+    )
+    required_globally = [
+        shift for shift in ('E', 'N')
+        if merged_shifts.get(shift, False)
+    ]
 
     for employee, shifts_by_day in fixed_shifts.items():
         for day, shift in shifts_by_day.items():
@@ -50,9 +179,13 @@ def find_fixed_input_conflicts(config):
                 if len(assigned) > 1:
                     conflicts.append(f"{day + 1}일 {shift}: 같은 그룹에 고정 근무자가 {len(assigned)}명입니다 ({assigned}).")
 
-        assigned_e = [employee for employee in range(config['num_employees']) if fixed_shifts.get(employee, {}).get(day) == 'E']
-        if len(assigned_e) > 1:
-            conflicts.append(f"{day + 1}일 E: 고정 근무자가 {len(assigned_e)}명입니다 ({assigned_e}).")
+        for shift in required_globally:
+            assigned = [
+                employee for employee in range(config['num_employees'])
+                if fixed_shifts.get(employee, {}).get(day) == shift
+            ]
+            if len(assigned) > 1:
+                conflicts.append(f"{day + 1}일 {shift}: 전체 근무조에 고정 근무자가 {len(assigned)}명입니다 ({assigned}).")
 
     return conflicts
 
@@ -64,13 +197,27 @@ def main():
     with open('config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # 2. 🌐 웹(GitHub Actions)에서 넘겨준 설정 파일(input.json) 읽기
+    # 2. 웹(GitHub Actions)에서 넘겨준 설정 파일(input.json) 읽기
     duration_conflicts = []
     config.setdefault('full_month_crew', {})
     if os.path.exists('input.json'):
-        print("--- 🌐 웹(Payload) 요청 감지: input.json 설정 업데이트 ---")
+        print("--- 웹(Payload) 요청 감지: input.json 설정 업데이트 ---")
         with open('input.json', 'r', encoding='utf-8') as f:
             payload = json.load(f)
+
+        payload_errors = validate_payload(payload, config)
+        if payload_errors:
+            with open('schedule_result.json', 'w', encoding='utf-8') as f:
+                json.dump(
+                    {"status": "INPUT_CONFLICT", "errors": payload_errors, "schedule": {}, "stats": {}},
+                    f,
+                    ensure_ascii=False,
+                    indent=2
+                )
+            print("--- 입력 오류: 스케줄러 실행을 중단합니다 ---")
+            for error in payload_errors:
+                print(error)
+            return
             
         # A. 연/월 적용
         if 'year' in payload and 'month' in payload:
@@ -99,6 +246,12 @@ def main():
         if 'full_month_crew' in payload:
             for emp_str, enabled in payload['full_month_crew'].items():
                 config['full_month_crew'][str(int(emp_str))] = bool(enabled)
+
+        if 'merged_shifts' in payload:
+            config.setdefault('merged_shifts', {'E': True, 'N': False})
+            for shift in ('E', 'N'):
+                if shift in payload['merged_shifts']:
+                    config['merged_shifts'][shift] = payload['merged_shifts'][shift]
 
         # E. 크루 휴식 기간 적용
         if 'durations' in payload:
@@ -142,14 +295,14 @@ def main():
                     normalized_shift = str(shift).strip().upper()
                     if normalized_shift in ('D', 'E', 'N', 'OFF', '휴가'):
                         employee = int(emp_str)
-                        day_index = int(day)
+                        day_index = int(day) - 1
                         fixed_shifts[str(employee)][str(day_index)] = normalized_shift
                         if normalized_shift == '휴가':
                             fixed_vacations.add((employee, day_index))
             config['fixed_shifts'] = fixed_shifts
             config['vacations'] = [list(vacation) for vacation in sorted(fixed_vacations)]
     else:
-        print("--- 💻 로컬/기본 환경 감지: config.json 원본 설정으로 실행합니다 ---")
+        print("--- 로컬/기본 환경 감지: config.json 원본 설정으로 실행합니다 ---")
 
     print("--- 설정 로드 완료 ---")
     print(f"{config.get('num_employees', 10)}명의 직원을 대상으로 {config.get('num_days', 31)}일간의 스케줄링을 진행합니다.")
@@ -185,7 +338,7 @@ def main():
             
         print_schedule(config, solution, expected_hours)
 
-        # 4. [핵심] 웹 UI 표시를 위한 JSON 결과 파일 저장
+        # 4. 웹 UI 표시를 위한 JSON 결과 파일 저장
         output_data = {
             "status": status,
             "vacations": config['vacations'],
@@ -201,7 +354,7 @@ def main():
         }
         
         for e in range(config.get('num_employees', 10)):
-            # 휴가는 결과 자체에 V로 저장해 프론트가 별도 목록에 의존하지 않도록 합니다.
+            # 휴가는 결과 자체에 V로 저장해 프론트가 별도 목록에 의존하지 않도록
             schedule_row = {
                 d: 'V' if (e, d) in vacation_set else (
                     solution.get(e, {}).get(d) if solution.get(e, {}).get(d) != 'off' else '-'
@@ -225,9 +378,21 @@ def main():
         with open('schedule_result.json', 'w', encoding='utf-8') as f:
             json.dump(output_data, f, ensure_ascii=False, indent=2)
             
-        print("✅ schedule_result.json 저장 완료 (웹 화면에서 읽어갈 준비 끝!)")
+        print("schedule_result.json 저장 완료")
     else:
         print("주어진 제약 조건 하에서 유효한 스케줄을 찾을 수 없습니다.")
+        with open('schedule_result.json', 'w', encoding='utf-8') as f:
+            json.dump(
+                {
+                    "status": status,
+                    "errors": ["주어진 제약 조건 하에서 유효한 스케줄을 찾을 수 없습니다."],
+                    "schedule": {},
+                    "stats": {}
+                },
+                f,
+                ensure_ascii=False,
+                indent=2
+            )
 
 def print_schedule(config, solution, expected_hours):
     """

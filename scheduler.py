@@ -23,6 +23,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     
     group_a = config['groups']['a']
     group_b = config['groups']['b']
+    merged_shifts = config.get('merged_shifts', {'E': True, 'N': False})
     
     shifts = list(config['shifts'].keys())
     shift_hours = {s: config['shifts'][s]['hours'] for s in shifts}
@@ -77,9 +78,13 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
     for d in all_days:
         model.AddExactlyOne(work[(e, d, 'D')] for e in group_a)
         model.AddExactlyOne(work[(e, d, 'D')] for e in group_b)
-        model.AddExactlyOne(work[(e, d, 'N')] for e in group_a)
-        model.AddExactlyOne(work[(e, d, 'N')] for e in group_b)
-        model.AddExactlyOne(work[(e, d, 'E')] for e in all_employees)
+        for shift in ('E', 'N'):
+            employees = all_employees if merged_shifts.get(shift, False) else None
+            if employees is not None:
+                model.AddExactlyOne(work[(e, d, shift)] for e in employees)
+            else:
+                model.AddExactlyOne(work[(e, d, shift)] for e in group_a)
+                model.AddExactlyOne(work[(e, d, shift)] for e in group_b)
 
     # 금지된 연속 근무 (E->D, D->N)
     for e in all_employees:
@@ -127,7 +132,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         is_crew_member = bool(crew_days)
 
         # -------------------------------------------------------------------
-        # 🎯 [수정 및 핵심 반영] 크루도 아니고 휴가도 아닌 '순수 일반 근무 가능일' 계산
+        # 크루도 아니고 휴가도 아닌 '순수 일반 근무 가능일' 계산
         # -------------------------------------------------------------------
         normal_days = [d for d in non_crew_days if (e, d) not in vacations]
         num_normal_days = len(normal_days)
@@ -140,7 +145,8 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             
             # 정수 연산을 위한 100배 스케일링: (일반 총 근무시간 / 일반 근무 가능일수) * 100
             daily_avg_rate = model.NewIntVar(0, 24 * 100, f'daily_avg_rate_e{e}')
-            model.Add(normal_hours * 100 == daily_avg_rate * num_normal_days)
+            # 나눗셈 결과를 내림해 기간 길이에 따른 불필요한 정수 등식 충돌을 피합니다.
+            model.AddDivisionEquality(daily_avg_rate, normal_hours * 100, num_normal_days)
             daily_avg_scaled_rates.append(daily_avg_rate)
 
         # --- Crew 멤버에 대한 페널티 ---
@@ -151,28 +157,29 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                 num_vacation_days = sum(1 for d in cycle_days if (e, d) in vacations)
                 effective_days = len(cycle_days) - num_vacation_days
 
+                # TODO: 매직넘버 40은 Crew 주 평균 기준시간입니다.
+                # TODO: 매직넘버 310은 가능한 최대 월 근무시간입니다.
                 if effective_days > 0:
-                    over_40h_avg_var = model.NewIntVar(0, 7 * 500, f'over_40h_avg_var_{e}_{cycle_index}')
+                    over_40h_avg_var = model.NewIntVar(0, 7 * 310, f'over_40h_avg_var_{e}_{cycle_index}')
                     model.Add(over_40h_avg_var >= (7 * total_hours) - (40 * effective_days))
 
-                    over_40h_avg_penalty = model.NewIntVar(0, 7 * 500 * 1000, f'over_40h_avg_penalty_{e}_{cycle_index}')
-                    # TODO: 매직넘버 40은 Crew 주 평균 기준시간입니다.
+                    over_40h_avg_penalty = model.NewIntVar(0, 7 * 310 * 1000, f'over_40h_avg_penalty_{e}_{cycle_index}')
+
                     model.AddMultiplicationEquality(over_40h_avg_penalty, over_40h_avg_var, PENALTY_PRIORITY_MAP[penalties_config['crew_over_40h_avg_priority']])
                     penalties.append(over_40h_avg_penalty)
 
                 expected_hours = 0
                 if effective_days > 0:
-                    # TODO: 매직넘버 7은 주간 일수입니다.
                     expected_hours = math.ceil(effective_days * 40 / 7.0)
                 expected_hours_analysis[e] += expected_hours
 
                 crew_hours = sum(work[(e, d, s)] * shift_hours[s] for d in cycle_days for s in shifts)
                 model.Add(crew_hours >= expected_hours)
 
-                over = model.NewIntVar(0, 500, f'over_e{e}_{cycle_index}')
+                over = model.NewIntVar(0, 310, f'over_e{e}_{cycle_index}')
                 model.Add(over >= crew_hours - expected_hours)
 
-                over_penalty = model.NewIntVar(0, 500 * 1000, f'over_penalty_{e}_{cycle_index}')
+                over_penalty = model.NewIntVar(0, 310 * 1000, f'over_penalty_{e}_{cycle_index}')
                 # 주기별 Crew 기간에서 기대시간보다 많이 근무하면 페널티 부여
                 model.AddMultiplicationEquality(over_penalty, over, PENALTY_PRIORITY_MAP[penalties_config['over_staffing_priority']])
                 penalties.append(over_penalty)
@@ -195,37 +202,38 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         r_E = shift_ratios[e]['E']
         r_N = shift_ratios[e]['N']
         r_total = r_D + r_E + r_N
+
         
         if r_total > 0:
             # 1. 1차 편차 변수
-            diff_D = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_D_{e}')
-            diff_E = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_E_{e}')
-            diff_N = model.NewIntVar(-500 * r_total, 500 * r_total, f'diff_N_{e}')
+            diff_D = model.NewIntVar(-num_days * r_total, num_days * r_total, f'diff_D_{e}')
+            diff_E = model.NewIntVar(-num_days * r_total, num_days * r_total, f'diff_E_{e}')
+            diff_N = model.NewIntVar(-num_days * r_total, num_days * r_total, f'diff_N_{e}')
             
             model.Add(diff_D == r_total * w_D - r_D * total_w)
             model.Add(diff_E == r_total * w_E - r_E * total_w)
             model.Add(diff_N == r_total * w_N - r_N * total_w)
 
             # 2. 절댓값 변수 생성
-            abs_D = model.NewIntVar(0, 500 * r_total, f'abs_D_{e}')
-            abs_E = model.NewIntVar(0, 500 * r_total, f'abs_E_{e}')
-            abs_N = model.NewIntVar(0, 500 * r_total, f'abs_N_{e}')
+            abs_D = model.NewIntVar(0, num_days * r_total, f'abs_D_{e}')
+            abs_E = model.NewIntVar(0, num_days * r_total, f'abs_E_{e}')
+            abs_N = model.NewIntVar(0, num_days * r_total, f'abs_N_{e}')
             
             model.AddAbsEquality(abs_D, diff_D)
             model.AddAbsEquality(abs_E, diff_E)
             model.AddAbsEquality(abs_N, diff_N)
 
-            # 3. [수정] 무거운 제곱 삭제 -> 단순 덧셈으로 개인별 오차 총합 계산
-            emp_ratio_err = model.NewIntVar(0, 3 * 500 * r_total, f'emp_ratio_err_{e}')
+            # 3. 단순 덧셈으로 개인별 오차 총합 계산
+            emp_ratio_err = model.NewIntVar(0, 3 * num_days * r_total, f'emp_ratio_err_{e}')
             model.Add(emp_ratio_err == abs_D + abs_E + abs_N)
             ratio_errors.append(emp_ratio_err)
             
             # 개인 오차에 기본 페널티 부여
             penalties.append(emp_ratio_err * ratio_priority)
 
-    # 4. [핵심] 한 명에게 쏠리는 것을 막기 위해 '가장 큰 오차(Max)'에 강력한 선형 페널티 부과
+    # 4. 한 명에게 쏠리는 것을 막기 위해 '가장 큰 오차(Max)'에 강력한 선형 페널티 부과
     if ratio_errors:
-        max_bound = max(3 * 500 * sum(shift_ratios[e].values()) for e in all_employees) if all_employees else 15000
+        max_bound = max(3 * num_days * sum(shift_ratios[e].values()) for e in all_employees) if all_employees else 15000
         max_ratio_err = model.NewIntVar(0, max_bound, 'max_ratio_err')
         
         # 10명의 오차 중 가장 큰 값을 찾아냄
@@ -249,7 +257,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddMultiplicationEquality(nn_penalty, n_to_n, PENALTY_PRIORITY_MAP[penalties_config['consecutive_n_shifts_priority']])
             penalties.append(nn_penalty)
 
-    # 연속 근무일이 길수록 더 큰 페널티를 부여합니다.
+    # 4일 연속 근무 이상부터, 연속 근무일이 길수록 더 큰 페널티를 부여합니다.
     consecutive_work_priority = PENALTY_PRIORITY_MAP.get(
         penalties_config.get('consecutive_work_days_priority', 'high'),
         100
@@ -261,9 +269,9 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             model.AddMaxEquality(worked_day, [work[(e, d, s)] for s in shifts])
             worked_days.append(worked_day)
 
-        for run_length in range(2, min(7, num_days) + 1):
-            # 긴 연속근무 창일수록 가중치를 키워 근무를 분산시킵니다.
-            window_penalty_weight = consecutive_work_priority * (run_length - 1)
+        for run_length in range(4, min(7, num_days) + 1):
+            # 3일 연속 근무까지는 허용하고, 4일째부터 페널티를 부과합니다.
+            window_penalty_weight = consecutive_work_priority * (run_length - 3)
             for start_day in range(num_days - run_length + 1):
                 consecutive_run = model.NewBoolVar(
                     f'consecutive_work_e{e}_d{start_day}_len{run_length}'
@@ -306,9 +314,36 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             same_shift_penalty = model.NewIntVar(0, transition_priority, f'same_shift_penalty_e{e}_d{d}')
             model.AddMultiplicationEquality(same_shift_penalty, [same_shift_any, transition_priority])
             penalties.append(same_shift_penalty)
+
+    # 같은 근무조가 휴무를 사이에 두고 가까운 날짜에 반복되는 패턴을 완화합니다.
+    clustering_priority = PENALTY_PRIORITY_MAP.get(
+        penalties_config.get('shift_clustering_priority', 'medium'),
+        10
+    )
+    clustering_window = max(2, min(num_days - 1, int(config.get('shift_clustering_window', 4))))
+    for e in all_employees:
+        for s in shifts:
+            for first_day in all_days:
+                last_day = min(num_days, first_day + clustering_window + 1)
+                for second_day in range(first_day + 2, last_day):
+                    same_shift_nearby = model.NewBoolVar(
+                        f'same_shift_nearby_e{e}_d{first_day}_{second_day}_{s}'
+                    )
+                    model.AddBoolAnd([
+                        work[(e, first_day, s)],
+                        work[(e, second_day, s)]
+                    ]).OnlyEnforceIf(same_shift_nearby)
+                    model.AddBoolOr([
+                        work[(e, first_day, s)].Not(),
+                        work[(e, second_day, s)].Not()
+                    ]).OnlyEnforceIf(same_shift_nearby.Not())
+
+                    distance = second_day - first_day
+                    clustering_weight = clustering_priority * (clustering_window - distance + 1)
+                    penalties.append(clustering_weight * same_shift_nearby)
         
     # -------------------------------------------------------------------
-    # 🎯 [수정 및 핵심 반영] 일반 근무 기간 하루 평균 근무시간 균등성(Max - Min) 페널티
+    # 일반 근무 기간 하루 평균 근무시간 균등성(Max - Min) 페널티
     # -------------------------------------------------------------------
     if daily_avg_scaled_rates:
         max_daily_rate = model.NewIntVar(0, 24 * 100, 'max_daily_avg_rate')
@@ -320,10 +355,8 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
         daily_fairness_var = model.NewIntVar(0, 24 * 100, 'daily_fairness_rate_var')
         model.Add(daily_fairness_var == max_daily_rate - min_daily_rate)
         
-        # [핵심] 근무시간 균등화가 '비율 맞추기'보다 수학적으로 무조건 최우선이 되도록 가중치 100배 폭격
         absolute_fairness_weight = PENALTY_PRIORITY_MAP[penalties_config['fairness_of_non_crew_work_priority']]
         
-        # 복잡한 AddMultiplicationEquality 대신 변수에 상수를 바로 곱해서 패널티에 추가 (연산 속도 증가)
         penalties.append(daily_fairness_var * absolute_fairness_weight)
 
     # --- [5] 목적 함수(Objective) 설정 및 문제 해결 ---

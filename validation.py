@@ -16,6 +16,7 @@ def validate_schedule(config, solution):
     
     group_a = config['groups']['a']
     group_b = config['groups']['b']
+    merged_shifts = config.get('merged_shifts', {'E': True, 'N': False})
     shifts = list(config['shifts'].keys())
     vacations = [tuple(v) for v in config['vacations']]
 
@@ -48,12 +49,15 @@ def validate_schedule(config, solution):
             violations.append(f"검증 오류: {d+1}일, A그룹 'D' 근무 인원 {d_coverage_group_a.get('D', 0)}명, 필요 인원 1명.")
         if d_coverage_group_b.get('D', 0) != 1:
             violations.append(f"검증 오류: {d+1}일, B그룹 'D' 근무 인원 {d_coverage_group_b.get('D', 0)}명, 필요 인원 1명.")
-        if d_coverage_group_a.get('N', 0) != 1:
-            violations.append(f"검증 오류: {d+1}일, A그룹 'N' 근무 인원 {d_coverage_group_a.get('N', 0)}명, 필요 인원 1명.")
-        if d_coverage_group_b.get('N', 0) != 1:
-            violations.append(f"검증 오류: {d+1}일, B그룹 'N' 근무 인원 {d_coverage_group_b.get('N', 0)}명, 필요 인원 1명.")
-        if d_coverage.get('E', 0) != 1:
-            violations.append(f"검증 오류: {d+1}일, 'E' 근무 인원 {d_coverage.get('E', 0)}명, 필요 인원 1명.")
+        for shift in ('E', 'N'):
+            if merged_shifts.get(shift, False):
+                if d_coverage.get(shift, 0) != 1:
+                    violations.append(f"검증 오류: {d+1}일, 전체 '{shift}' 근무 인원 {d_coverage.get(shift, 0)}명, 필요 인원 1명.")
+            else:
+                if d_coverage_group_a.get(shift, 0) != 1:
+                    violations.append(f"검증 오류: {d+1}일, A그룹 '{shift}' 근무 인원 {d_coverage_group_a.get(shift, 0)}명, 필요 인원 1명.")
+                if d_coverage_group_b.get(shift, 0) != 1:
+                    violations.append(f"검증 오류: {d+1}일, B그룹 '{shift}' 근무 인원 {d_coverage_group_b.get(shift, 0)}명, 필요 인원 1명.")
 
     # 직원별 제약 조건 확인
     for e in all_employees:

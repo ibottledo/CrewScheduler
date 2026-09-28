@@ -11,6 +11,10 @@
         "E": { "hours": 6 },
         "N": { "hours": 8 }
     },
+    "merged_shifts": {
+        "E": true,
+        "N": false
+    },
     "crewX_periods": {
         "0": [-1, -2], "1": [-1, -2], "2": [-1, -2], "3": [-1, -2], "4": [-1, -2],
         "5": [-1, -2], "6": [-1, -2], "7": [-1, -2], "8": [-1, -2], "9": [-1, -2]
@@ -38,12 +42,14 @@
         "_comment_levels": "highest > high > medium > low. Higher priority means the solver will try harder to avoid this penalty.",
         "crew_over_40h_avg_priority": "highest",
         "over_staffing_priority": "highest",
-        "fairness_of_non_crew_work_priority": "highest",
-        "consecutive_n_shifts_priority": "high",
-        "consecutive_work_days_priority": "high",
+        "consecutive_n_shifts_priority": "highest",
+        "fairness_of_non_crew_work_priority": "high",
+        "shift_ratio_priority": "high",
+        "shift_clustering_priority": "medium",
+        "consecutive_work_days_priority": "medium",
         "shift_transition_diversity_priority": "medium",
-        "shift_ratio_priority": "medium",
         "max_over_staffing_priority": "low"
     },
-    "solver_time_limit": 120.0
+    "solver_time_limit": 120.0,
+    "shift_clustering_window": 4
 }
