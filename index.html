@@ -134,11 +134,12 @@
       const year = parseInt(document.getElementById('year').value);
       const month = parseInt(document.getElementById('month').value);
       daysInMonth = new Date(year, month, 0).getDate();
+      const defaultRatios = getDefaultRatios();
       
       for(let i = 0; i <= 9; i++) {
         if (!durationsMap[i]) durationsMap[i] = [0, 0];
         if (fullMonthCrewMap[i] === undefined) fullMonthCrewMap[i] = false;
-        if (!ratiosMap[i]) ratiosMap[i] = {D: 2, E: 1, N: 2};
+        if (!ratiosMap[i]) ratiosMap[i] = {...defaultRatios};
         if (!fixedShiftsMap[i]) fixedShiftsMap[i] = {};
       }
       loadCrewData();
@@ -147,8 +148,27 @@
     }
 
     function toggleShiftMerge(shift) {
+      const previousDefaultRatios = getDefaultRatios();
       mergedShifts[shift] = !mergedShifts[shift];
+      const defaultRatios = getDefaultRatios();
+      for (let employee = 0; employee < 10; employee++) {
+        if (sameRatios(ratiosMap[employee], previousDefaultRatios)) {
+          ratiosMap[employee] = {...defaultRatios};
+        }
+      }
+      loadCrewData();
       renderShiftMergeButtons();
+    }
+
+    function getDefaultRatios() {
+      if (mergedShifts.E && mergedShifts.N) return {D: 2, E: 1, N: 1};
+      if (mergedShifts.E && !mergedShifts.N) return {D: 2, E: 1, N: 2};
+      if (!mergedShifts.E && mergedShifts.N) return {D: 2, E: 2, N: 1};
+      return {D: 1, E: 1, N: 1};
+    }
+
+    function sameRatios(left, right) {
+      return left && left.D === right.D && left.E === right.E && left.N === right.N;
     }
 
     function renderShiftMergeButtons() {
@@ -163,7 +183,7 @@
       document.getElementById('startDay').value = duration[0] === 0 ? '' : duration[0];
       document.getElementById('endDay').value = duration[1] === 0 ? '' : duration[1];
 
-      const ratio = ratiosMap[emp] || {D: 2, E: 1, N: 2};
+      const ratio = ratiosMap[emp] || getDefaultRatios();
       document.getElementById('ratioD').value = ratio.D;
       document.getElementById('ratioE').value = ratio.E;
       document.getElementById('ratioN').value = ratio.N;
