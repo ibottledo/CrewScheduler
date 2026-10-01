@@ -304,6 +304,17 @@ def main():
     else:
         print("--- 로컬/기본 환경 감지: config.json 원본 설정으로 실행합니다 ---")
 
+    for employee in range(config.get('num_employees', 10)):
+        employee_key = str(employee)
+        if config.get('full_month_crew', {}).get(employee_key, False):
+            continue
+        period = config.get('crewX_periods', {}).get(employee_key, [-1, -2])
+        if tuple(period) == (-1, -2):
+            config.setdefault('crewX_periods', {})[employee_key] = [
+                0,
+                config['num_days'] - 1
+            ]
+
     print("--- 설정 로드 완료 ---")
     print(f"{config.get('num_employees', 10)}명의 직원을 대상으로 {config.get('num_days', 31)}일간의 스케줄링을 진행합니다.")
     print(f"솔버 제한 시간: {config.get('solver_time_limit', 1000)}초")

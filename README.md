@@ -1,6 +1,6 @@
 # CrewScheduler
 
-[스케줄러 열기](https://ibottledo.github.io/CrewScheduler)
+[LINK](https://ibottledo.github.io/CrewScheduler)
 
 10명의 직원을 대상으로 월간 D(주간), E(저녁), N(야간) 근무표를 자동 생성합니다. 웹페이지에서 PAT를 입력하지 않고 바로 사용할 수 있습니다.
 
