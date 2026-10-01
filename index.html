@@ -60,14 +60,14 @@
         <select id="month" onchange="initMonth()">
           <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
           <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
-          <option value="7">7월</option><option value="8" selected>8월</option><option value="9">9월</option>
+          <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
           <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
         </select>
       </div>
     </div>
 
     <label for="solverTimeLimit">솔버 제한 시간 (초)</label>
-    <input type="number" id="solverTimeLimit" min="1" step="1" value="120">
+    <input type="number" id="solverTimeLimit" min="1" step="30" value="120">
   </div>
 
   <!-- 직원 설정부 -->
@@ -127,8 +127,16 @@
     const SCHEDULER_API_URL = 'https://crewscheduler.lbd2409.workers.dev';
 
     window.onload = function() {
+      setInitialMonth();
       initMonth();
     };
+
+    function setInitialMonth() {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      document.getElementById('year').value = nextMonth.getFullYear();
+      document.getElementById('month').value = nextMonth.getMonth() + 1;
+    }
 
     function initMonth() {
       const year = parseInt(document.getElementById('year').value);
