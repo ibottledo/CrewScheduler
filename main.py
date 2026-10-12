@@ -453,6 +453,10 @@ def print_schedule(config, solution, expected_hours):
         crew_hours = 0
         start_d, end_d = crewX_periods.get(e, (-1, -2))
         is_full_month_crew = full_month_crew.get(e, False)
+        crew_days = set(range(num_days)) if is_full_month_crew else {
+            d for d in range(num_days)
+            if 0 <= start_d <= end_d < num_days and (d < start_d or d > end_d)
+        }
 
         for d in range(num_days):
             shift = solution.get(e, {}).get(d)
@@ -460,7 +464,8 @@ def print_schedule(config, solution, expected_hours):
                 counts[shift] += 1
                 hours = shift_hours.get(shift, 0)
                 total_hours += hours
-                if is_full_month_crew or (0 <= start_d <= end_d < num_days and (d < start_d or d > end_d)):
+                crew_day = d - 1 if shift == 'N' else d
+                if crew_day in crew_days:
                     crew_hours += hours
         
         num_vacation_days = len(my_vacations.get(e, []))

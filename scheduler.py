@@ -129,6 +129,7 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             d for d in all_days
             if has_break_period and break_start <= d <= break_end
         ]
+        non_crew_day_set = set(non_crew_days)
         is_crew_member = bool(crew_days)
 
         # -------------------------------------------------------------------
@@ -141,7 +142,8 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
             normal_hours = model.NewIntVar(0, 500, f'normal_hours_e{e}')
             model.Add(normal_hours == sum(work[(e, d, s)] * shift_hours[s] 
                                           for d in normal_days
-                                          for s in shifts))
+                                          for s in shifts
+                                          if (d - 1 if s == 'N' else d) in non_crew_day_set))
             
             # 정수 연산을 위한 100배 스케일링: (일반 총 근무시간 / 일반 근무 가능일수) * 100
             daily_avg_rate = model.NewIntVar(0, 24 * 100, f'daily_avg_rate_e{e}')
@@ -173,7 +175,13 @@ def solve_monthly_crew_schedule(config: Dict[str, Any]) -> Tuple[str, float, Dic
                     expected_hours = math.ceil(effective_days * 40 / 7.0)
                 expected_hours_analysis[e] += expected_hours
 
-                crew_hours = sum(work[(e, d, s)] * shift_hours[s] for d in cycle_days for s in shifts)
+                crew_day_set_for_cycle = set(cycle_days)
+                crew_hours = sum(
+                    work[(e, d, s)] * shift_hours[s]
+                    for d in all_days
+                    for s in shifts
+                    if (d - 1 if s == 'N' else d) in crew_day_set_for_cycle
+                )
                 model.Add(crew_hours >= expected_hours)
 
                 over = model.NewIntVar(0, 310, f'over_e{e}_{cycle_index}')
